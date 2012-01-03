@@ -3,3 +3,4 @@ _obj/
 htmlayout/
 HTMLayoutSDK.zip
 *.pyc
+*.o
