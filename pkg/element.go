@@ -9,6 +9,7 @@ import "C"
 
 import (
 	"fmt"
+	"runtime"
 	"strconv"
 	"unsafe"
 	"utf16"
@@ -101,6 +102,21 @@ type Element struct {
 	handle Handle
 }
 
+// Constructor
+func NewElement(h Handle) *Element {
+	e := &Element{nil}
+	e.set(h)
+	runtime.SetFinalizer(*e, (*Element).finalize)
+	return e
+}
+
+// Finalizer method, only to be called from Release or by Go (as a finalizer)
+func (e *Element) finalize() {
+	// Release the underlying htmlayout handle
+	unuse(e.handle)
+	e.handle = nil
+}
+
 func (e *Element) set(h Handle) {
 	use(h)
 	unuse(e.handle)
@@ -108,8 +124,10 @@ func (e *Element) set(h Handle) {
 }
 
 func (e *Element) Release() {
-	unuse(e.handle)
-	e.handle = nil
+	// Unregister the finalizer so that it does not get called by Go
+	// and then explicitly finalize this element
+	runtime.SetFinalizer(*e, nil)
+	e.finalize()	
 }
 
 func (e *Element) GetHandle() Handle {
@@ -275,15 +293,6 @@ func (e *Element) ClearStyles(key string) {
 	}
 }
 
-
-
-// Constructor
-
-func NewElement(h Handle) *Element {
-	e := &Element{nil}
-	e.set(h)
-	return e
-}
 
 
 

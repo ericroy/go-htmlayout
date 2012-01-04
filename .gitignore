@@ -4,3 +4,4 @@ htmlayout/
 HTMLayoutSDK.zip
 *.pyc
 *.o
+_cgo_export.h
