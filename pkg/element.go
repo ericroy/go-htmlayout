@@ -50,7 +50,9 @@ func domPanic(result C.HLDOM_RESULT, message string) {
 
 // StringToUTF16 returns the UTF-16 encoding of the UTF-8 string s,
 // with a terminating NUL added.
-func StringToUTF16(s string) []uint16 { return utf16.Encode([]int(s + "\x00")) }
+func StringToUTF16(s string) []uint16 {
+	return utf16.Encode([]int(s + "\x00"))
+}
 
 // UTF16ToString returns the UTF-8 encoding of the UTF-16 sequence s,
 // with a terminating NUL removed.
@@ -71,7 +73,9 @@ func UTF16ToString(s *uint16) string {
 
 // StringToUTF16Ptr returns pointer to the UTF-16 encoding of
 // the UTF-8 string s, with a terminating NUL added.
-func StringToUTF16Ptr(s string) *uint16 { return &StringToUTF16(s)[0] }
+func StringToUTF16Ptr(s string) *uint16 {
+	return &StringToUTF16(s)[0]
+}
 
 
 
@@ -110,7 +114,8 @@ func NewElement(h Handle) *Element {
 	return e
 }
 
-// Finalizer method, only to be called from Release or by Go (as a finalizer)
+// Finalizer method, only to be called from Release or by
+// the Go runtime as a finalizer)
 func (e *Element) finalize() {
 	// Release the underlying htmlayout handle
 	unuse(e.handle)
