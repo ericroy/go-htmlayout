@@ -1,7 +1,5 @@
 package htmlayout
 /*
-#cgo CFLAGS: -I../htmlayout/include
-#cgo LDFLAGS: ../htmlayout/lib/HTMLayout.lib
 #include <stdlib.h>
 #include <htmlayout.h>
 */
@@ -48,15 +46,15 @@ func domPanic(result C.HLDOM_RESULT, message string) {
 	panic(DomError{result, message})
 }
 
-// StringToUTF16 returns the UTF-16 encoding of the UTF-8 string s,
+// Returns the utf-16 encoding of the utf-8 string s,
 // with a terminating NUL added.
-func StringToUTF16(s string) []uint16 {
+func stringToUtf16(s string) []uint16 {
 	return utf16.Encode([]int(s + "\x00"))
 }
 
-// UTF16ToString returns the UTF-8 encoding of the UTF-16 sequence s,
+// Returns the utf-8 encoding of the utf-16 sequence s,
 // with a terminating NUL removed.
-func UTF16ToString(s *uint16) string {
+func utf16ToString(s *uint16) string {
 	if s == nil {
 		panic("null cstring")
 	}
@@ -71,10 +69,10 @@ func UTF16ToString(s *uint16) string {
 	return ""
 }
 
-// StringToUTF16Ptr returns pointer to the UTF-16 encoding of
-// the UTF-8 string s, with a terminating NUL added.
-func StringToUTF16Ptr(s string) *uint16 {
-	return &StringToUTF16(s)[0]
+// Returns pointer to the utf-16 encoding of
+// the utf-8 string s, with a terminating NUL added.
+func stringToUtf16Ptr(s string) *uint16 {
+	return &stringToUtf16(s)[0]
 }
 
 
@@ -109,7 +107,7 @@ type Element struct {
 // Constructor
 func NewElement(h Handle) *Element {
 	e := &Element{nil}
-	e.set(h)
+	e.setHandle(h)
 	runtime.SetFinalizer(*e, (*Element).finalize)
 	return e
 }
@@ -122,7 +120,7 @@ func (e *Element) finalize() {
 	e.handle = nil
 }
 
-func (e *Element) set(h Handle) {
+func (e *Element) setHandle(h Handle) {
 	use(h)
 	unuse(e.handle)
 	e.handle = h
@@ -151,7 +149,7 @@ func (e *Element) GetAttr(key string) *string {
 		domPanic(ret, "failed to get attribute: "+key)
 	}
 	if szValue != nil {
-		s := UTF16ToString((*uint16)(szValue))
+		s := utf16ToString((*uint16)(szValue))
 		return &s
 	}
 	return nil;
@@ -183,11 +181,11 @@ func (e *Element) SetAttr(key string, value interface{}) {
 	szKey := C.CString(key)
 	var ret C.HLDOM_RESULT = HLDOM_OK
 	if v, ok := value.(string); ok {
-		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(StringToUTF16Ptr(v)))
+		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(v)))
 	} else if v, ok := value.(float32); ok {
-		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(StringToUTF16Ptr(strconv.Ftoa32(v, 'e', 6))))
+		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Ftoa32(v, 'e', 6))))
 	} else if v, ok := value.(int); ok {
-		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(StringToUTF16Ptr(strconv.Itoa(v))))
+		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Itoa(v))))
 	} else if value == nil {
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), nil)
 	} else {
@@ -208,7 +206,7 @@ func (e *Element) GetAttrValueByIndex(index int) string {
 	if ret := C.HTMLayoutGetNthAttribute(e.handle, (C.UINT)(index), nil, (*C.LPCWSTR)(&szValue)); ret != HLDOM_OK {
 		domPanic(ret, fmt.Sprintf("failed to get attribute name by index: %d", index))
 	}
-	return UTF16ToString((*uint16)(szValue))
+	return utf16ToString((*uint16)(szValue))
 }
 
 func (e *Element) GetAttrNameByIndex(index int) string {
@@ -240,7 +238,7 @@ func (e *Element) GetStyle(key string) *string {
 		domPanic(ret, "failed to get style: "+key)
 	}
 	if szValue != nil {
-		s := UTF16ToString((*uint16)(szValue))
+		s := utf16ToString((*uint16)(szValue))
 		return &s
 	}
 	return nil;
@@ -272,11 +270,11 @@ func (e *Element) SetStyle(key string, value interface{}) {
 	szKey := C.CString(key)
 	var ret C.HLDOM_RESULT = HLDOM_OK
 	if v, ok := value.(string); ok {
-		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(StringToUTF16Ptr(v)))
+		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(v)))
 	} else if v, ok := value.(float32); ok {
-		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(StringToUTF16Ptr(strconv.Ftoa32(v, 'e', 6))))
+		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Ftoa32(v, 'e', 6))))
 	} else if v, ok := value.(int); ok {
-		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(StringToUTF16Ptr(strconv.Itoa(v))))
+		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Itoa(v))))
 	} else if value == nil {
 		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), nil)
 	} else {
