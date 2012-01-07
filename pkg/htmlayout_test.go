@@ -1,8 +1,10 @@
-package htmlayout
+package gohl
 
 import (
 	"testing"
+	"exp/wingui/main"
 )
 
-func TestSomething(t *testing.T) {
+func TestBasicWindow(t *testing.T) {
+
 }

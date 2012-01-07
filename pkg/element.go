@@ -1,5 +1,8 @@
-package htmlayout
+package gohl
 /*
+#cgo CFLAGS: -I../htmlayout/include
+#cgo LDFLAGS: ../htmlayout/lib/HTMLayout.lib
+
 #include <stdlib.h>
 #include <htmlayout.h>
 */
@@ -143,9 +146,8 @@ func (e *Element) GetHandle() Handle {
 func (e *Element) GetAttr(key string) *string {
 	szValue := (*C.WCHAR)(nil)
 	szKey := C.CString(key)
-	ret := C.HTMLayoutGetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.LPCWSTR)(&szValue))
-	C.free(unsafe.Pointer(szKey))
-	if ret != HLDOM_OK {
+	defer C.free(unsafe.Pointer(szKey))
+	if ret := C.HTMLayoutGetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.LPCWSTR)(&szValue)); ret != HLDOM_OK {
 		domPanic(ret, "failed to get attribute: "+key)
 	}
 	if szValue != nil {
@@ -179,6 +181,7 @@ func (e *Element) GetAttrAsInt(key string) *int {
 
 func (e *Element) SetAttr(key string, value interface{}) {
 	szKey := C.CString(key)
+	defer C.free(unsafe.Pointer(szKey))
 	var ret C.HLDOM_RESULT = HLDOM_OK
 	if v, ok := value.(string); ok {
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(v)))
@@ -191,7 +194,6 @@ func (e *Element) SetAttr(key string, value interface{}) {
 	} else {
 		panic("don't know how to format this argument type")
 	}
-	C.free(unsafe.Pointer(szKey))
 	if ret != HLDOM_OK {
 		domPanic(ret, "failed to set attribute: "+key)
 	}
@@ -232,9 +234,8 @@ func (e *Element) GetAttrCount(index int) int {
 func (e *Element) GetStyle(key string) *string {
 	szValue := (*C.WCHAR)(nil)
 	szKey := C.CString(key)
-	ret := C.HTMLayoutGetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.LPCWSTR)(&szValue))
-	C.free(unsafe.Pointer(szKey))
-	if ret != HLDOM_OK {
+	defer C.free(unsafe.Pointer(szKey))	
+	if ret := C.HTMLayoutGetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.LPCWSTR)(&szValue)); ret != HLDOM_OK {
 		domPanic(ret, "failed to get style: "+key)
 	}
 	if szValue != nil {
@@ -268,6 +269,7 @@ func (e *Element) GetStyleAsInt(key string) *int {
 
 func (e *Element) SetStyle(key string, value interface{}) {
 	szKey := C.CString(key)
+	defer C.free(unsafe.Pointer(szKey))
 	var ret C.HLDOM_RESULT = HLDOM_OK
 	if v, ok := value.(string); ok {
 		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(v)))
@@ -280,7 +282,6 @@ func (e *Element) SetStyle(key string, value interface{}) {
 	} else {
 		panic("don't know how to format this argument type")
 	}
-	C.free(unsafe.Pointer(szKey))
 	if ret != HLDOM_OK {
 		domPanic(ret, "failed to set style: "+key)
 	}
