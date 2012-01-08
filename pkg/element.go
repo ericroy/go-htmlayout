@@ -47,7 +47,7 @@ func (self DomError) String() string {
 }
 
 func domPanic(result C.HLDOM_RESULT, message string) {
-	panic(DomError{result, message})
+	log.Panic(DomError{result, message})
 }
 
 // Returns the utf-16 encoding of the utf-8 string s,
@@ -60,7 +60,7 @@ func stringToUtf16(s string) []uint16 {
 // with a terminating NUL removed.
 func utf16ToString(s *uint16) string {
 	if s == nil {
-		panic("null cstring")
+		log.Panic("null cstring")
 	}
 	us := make([]uint16, 0, 256) 
 	for p := uintptr(unsafe.Pointer(s)); ; p += 2 { 
@@ -110,22 +110,20 @@ type Element struct {
 func NewElement(h C.HELEMENT) *Element {
 	e := &Element{nil}
 	e.setHandle(h)
-	log.Print("Setting finalizer")
-	runtime.SetFinalizer(*e, (*Element).finalize)
-	log.Print("Returning element")
+	runtime.SetFinalizer(e, (*Element).finalize)
 	return e
 }
 
 func GetRootElement(hwnd uint32) *Element {
 	var handle C.HELEMENT = nil
 	if ret := C.HTMLayoutGetRootElement(C.HWND(C.HANDLE(uintptr(hwnd))), &handle); ret != HLDOM_OK {
-		domPanic(ret, "failed to get root element")
+		domPanic(ret, "Failed to get root element")
 	}
 	return NewElement(handle)
 }
 
 // Finalizer method, only to be called from Release or by
-// the Go runtime as a finalizer)
+// the Go runtime
 func (e *Element) finalize() {
 	// Release the underlying htmlayout handle
 	unuse(e.handle)
@@ -135,7 +133,7 @@ func (e *Element) finalize() {
 func (e *Element) Release() {
 	// Unregister the finalizer so that it does not get called by Go
 	// and then explicitly finalize this element
-	runtime.SetFinalizer(*e, nil)
+	runtime.SetFinalizer(e, nil)
 	e.finalize()	
 }
 
@@ -158,7 +156,7 @@ func (e *Element) GetAttr(key string) *string {
 	szKey := C.CString(key)
 	defer C.free(unsafe.Pointer(szKey))
 	if ret := C.HTMLayoutGetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.LPCWSTR)(&szValue)); ret != HLDOM_OK {
-		domPanic(ret, "failed to get attribute: "+key)
+		domPanic(ret, "Failed to get attribute: "+key)
 	}
 	if szValue != nil {
 		s := utf16ToString((*uint16)(szValue))
@@ -202,10 +200,10 @@ func (e *Element) SetAttr(key string, value interface{}) {
 	} else if value == nil {
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), nil)
 	} else {
-		panic("don't know how to format this argument type")
+		log.Panic("Don't know how to format this argument type")
 	}
 	if ret != HLDOM_OK {
-		domPanic(ret, "failed to set attribute: "+key)
+		domPanic(ret, "Failed to set attribute: "+key)
 	}
 }
 
@@ -216,7 +214,7 @@ func (e *Element) RemoveAttr(key string) {
 func (e *Element) GetAttrValueByIndex(index int) string {
 	szValue := (*C.WCHAR)(nil)
 	if ret := C.HTMLayoutGetNthAttribute(e.handle, (C.UINT)(index), nil, (*C.LPCWSTR)(&szValue)); ret != HLDOM_OK {
-		domPanic(ret, fmt.Sprintf("failed to get attribute name by index: %d", index))
+		domPanic(ret, fmt.Sprintf("Failed to get attribute name by index: %d", index))
 	}
 	return utf16ToString((*uint16)(szValue))
 }
@@ -224,7 +222,7 @@ func (e *Element) GetAttrValueByIndex(index int) string {
 func (e *Element) GetAttrNameByIndex(index int) string {
 	szName := (*C.CHAR)(nil)
 	if ret := C.HTMLayoutGetNthAttribute(e.handle, (C.UINT)(index), (*C.LPCSTR)(&szName), nil); ret != HLDOM_OK {
-		domPanic(ret, fmt.Sprintf("failed to get attribute name by index: %d", index))	
+		domPanic(ret, fmt.Sprintf("Failed to get attribute name by index: %d", index))	
 	}
 	return C.GoString((*C.char)(szName))
 }
@@ -232,7 +230,7 @@ func (e *Element) GetAttrNameByIndex(index int) string {
 func (e *Element) GetAttrCount(index int) int {
 	var count C.UINT = 0
 	if ret := C.HTMLayoutGetAttributeCount(e.handle, &count); ret != HLDOM_OK {
-		domPanic(ret, "failed to get attribute count")
+		domPanic(ret, "Failed to get attribute count")
 	}
 	return int(count)
 }
@@ -246,7 +244,7 @@ func (e *Element) GetStyle(key string) *string {
 	szKey := C.CString(key)
 	defer C.free(unsafe.Pointer(szKey))	
 	if ret := C.HTMLayoutGetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.LPCWSTR)(&szValue)); ret != HLDOM_OK {
-		domPanic(ret, "failed to get style: "+key)
+		domPanic(ret, "Failed to get style: "+key)
 	}
 	if szValue != nil {
 		s := utf16ToString((*uint16)(szValue))
@@ -290,10 +288,10 @@ func (e *Element) SetStyle(key string, value interface{}) {
 	} else if value == nil {
 		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), nil)
 	} else {
-		panic("don't know how to format this argument type")
+		log.Panic("Don't know how to format this argument type")
 	}
 	if ret != HLDOM_OK {
-		domPanic(ret, "failed to set style: "+key)
+		domPanic(ret, "Failed to set style: "+key)
 	}
 }
 
@@ -303,7 +301,7 @@ func (e *Element) RemoveStyle(key string) {
 
 func (e *Element) ClearStyles(key string) {
 	if ret := C.HTMLayoutSetStyleAttribute(e.handle, nil, nil); ret != HLDOM_OK {
-		domPanic(ret, "failed to clear all styles")
+		domPanic(ret, "Failed to clear all styles")
 	}
 }
 

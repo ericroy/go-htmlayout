@@ -7,10 +7,10 @@ import re
 BASE = "./htmlayout/include"
 REPLACEMENTS = {
 	"htmlayout_dom.h": [
-		("struct htmlayout_dom_element;", "typedef struct htmlayout_dom_element {} htmlayout_dom_element;", 1)
+		(r"struct htmlayout_dom_element;", r"typedef struct htmlayout_dom_element htmlayout_dom_element;", 1),
 	],
 	"htmlayout_behavior.h": [
-		("struct EXCHANGE_PARAMS;", "typedef struct EXCHANGE_PARAMS EXCHANGE_PARAMS;", 1)
+		(r"struct EXCHANGE_PARAMS;", r"typedef struct EXCHANGE_PARAMS EXCHANGE_PARAMS;", 1),
 	],
 }
 
@@ -21,6 +21,7 @@ def apply_replacements(path):
 			s = re.sub(find, replace, s, count)
 		file.seek(0)
 		file.write(s)
+		file.truncate()
 
 def restore_backups():
 	for filename in REPLACEMENTS:
