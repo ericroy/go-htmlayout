@@ -10,6 +10,7 @@ import "C"
 
 import (
 	"fmt"
+	"log"
 	"runtime"
 	"strconv"
 	"unsafe"
@@ -81,15 +82,13 @@ func stringToUtf16Ptr(s string) *uint16 {
 
 
 
-type Handle C.HELEMENT
-
-func use(handle Handle) {
+func use(handle C.HELEMENT) {
 	if dr := C.HTMLayout_UseElement(handle); dr != HLDOM_OK {
 		domPanic(dr, "UseElement");
 	}
 }
 
-func unuse(handle Handle) {
+func unuse(handle C.HELEMENT) {
 	if handle != nil {
 		if dr := C.HTMLayout_UnuseElement(handle); dr != HLDOM_OK {
 			domPanic(dr, "UnuseElement");
@@ -104,15 +103,25 @@ Element
 Represents a single DOM element, owns and manages a Handle
 */
 type Element struct {
-	handle Handle
+	handle C.HELEMENT
 }
 
-// Constructor
-func NewElement(h Handle) *Element {
+// Constructors
+func NewElement(h C.HELEMENT) *Element {
 	e := &Element{nil}
 	e.setHandle(h)
+	log.Print("Setting finalizer")
 	runtime.SetFinalizer(*e, (*Element).finalize)
+	log.Print("Returning element")
 	return e
+}
+
+func GetRootElement(hwnd uint32) *Element {
+	var handle C.HELEMENT = nil
+	if ret := C.HTMLayoutGetRootElement(C.HWND(C.HANDLE(uintptr(hwnd))), &handle); ret != HLDOM_OK {
+		domPanic(ret, "failed to get root element")
+	}
+	return NewElement(handle)
 }
 
 // Finalizer method, only to be called from Release or by
@@ -123,12 +132,6 @@ func (e *Element) finalize() {
 	e.handle = nil
 }
 
-func (e *Element) setHandle(h Handle) {
-	use(h)
-	unuse(e.handle)
-	e.handle = h
-}
-
 func (e *Element) Release() {
 	// Unregister the finalizer so that it does not get called by Go
 	// and then explicitly finalize this element
@@ -136,7 +139,14 @@ func (e *Element) Release() {
 	e.finalize()	
 }
 
-func (e *Element) GetHandle() Handle {
+
+func (e *Element) setHandle(h C.HELEMENT) {
+	use(h)
+	unuse(e.handle)
+	e.handle = h
+}
+
+func (e *Element) GetHandle() C.HELEMENT {
 	return e.handle
 }
 
