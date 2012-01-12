@@ -160,9 +160,25 @@ type MouseParams struct {
 type EventHandler interface {
 	Attached(he HELEMENT)
 	Detached(he HELEMENT)
-
 	HandleMouse(he HELEMENT, params *MouseParams) bool
 }
+
+type EventHandlerBase struct {
+}
+
+func (e *EventHandlerBase) Attached(he HELEMENT) {
+	log.Print("Event handler attached")
+}
+
+func (e *EventHandlerBase) Detached(he HELEMENT) {
+	log.Print("Event handler detached")
+}
+
+func (e *EventHandlerBase) HandleMouse(he HELEMENT, params *MouseParams) bool {
+	//log.Printf("Mouse event pos: %d, %d", params.Pos.X, params.Pos.Y)
+	return true
+}
+
 
 
 
