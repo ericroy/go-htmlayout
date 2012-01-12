@@ -32,7 +32,7 @@ const (
 // HTMLayout Window Proc without call of DefWindowProc.
 EXTERN_C LRESULT HLAPI HTMLayoutProcND(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, BOOL* pbHandled);
 */
-func HTMLayoutProcND(hwnd, msg uint32, wparam, lparam int32) (uintptr, bool) {
+func HTMLayoutProcND(hwnd, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
 	var handled C.BOOL = 0
 	var result C.LRESULT = C.HTMLayoutProcND(C.HWND(C.HANDLE(uintptr(hwnd))), C.UINT(msg),
 		C.WPARAM(wparam), C.LPARAM(lparam), &handled)
