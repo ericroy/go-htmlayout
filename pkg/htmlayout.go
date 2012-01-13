@@ -41,9 +41,9 @@ const (
 
 
 	// PhaseMask
-	BUBBLING = C.BUBBLING // bubbling (emersion) phase
-	SINKING  = C.SINKING  // capture (immersion) phase, this flag is or'ed with EVENTS codes below
-	HANDLED  = C.HANDLED  // event already processed.
+	BUBBLING = uint32(C.BUBBLING) // bubbling (emersion) phase
+	SINKING  = uint32(C.SINKING)  // capture (immersion) phase, this flag is or'ed with EVENTS codes below
+	HANDLED  = uint32(C.HANDLED)  // event already processed.
 
 	// EventGroups
 	HANDLE_INITIALIZATION = C.HANDLE_INITIALIZATION /** attached/detached */
@@ -422,7 +422,6 @@ type GestureParams struct {
 	DeltaXY   Size
 	DeltaV    float64
 }
-
 
 /*
 // HTMLayout Window Proc without call of DefWindowProc.
