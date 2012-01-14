@@ -7,7 +7,7 @@ package gohl
 #include <htmlayout.h>
 
 extern BOOL CALLBACK MainElementProc(LPVOID tag, HELEMENT he, UINT evtg, LPVOID prms );
-LPELEMENT_EVENT_PROC MainElementProcAddr = &MainElementProc;
+extern LPELEMENT_EVENT_PROC MainElementProcAddr;
 
 */
 import "C"
@@ -182,6 +182,17 @@ func (e *Element) DetachHandler(handler EventHandler) {
 	}
 }
 
+func (e *Element) SetCapture() {
+	if ret := C.HTMLayoutSetCapture(e.handle); ret != HLDOM_OK {
+		domPanic(ret, "Failed to SetCapture for element")
+	}
+}
+
+func (e *Element) ReleaseCapture() {
+	if ok := C.ReleaseCapture(); ok == 0 {
+		panic("Failed to ReleaseCapture for element");
+	}
+}
 
 // HTML attribute accessors/modifiers:
 

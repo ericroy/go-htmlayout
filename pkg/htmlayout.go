@@ -13,12 +13,13 @@ BOOL CALLBACK MainElementProc(LPVOID tag, HELEMENT he, UINT evtg, LPVOID prms )
 {
 	return goMainElementProc(tag, he, evtg, prms);
 }
+
+LPELEMENT_EVENT_PROC MainElementProcAddr = &MainElementProc;
 */
 import "C"
 
 import (
 	"os"
-	"fmt"
 	"log"
 	"unsafe"
 )
@@ -64,13 +65,6 @@ const (
 	HANDLE_ALL             = C.HANDLE_ALL             /** all of them */
 	DISABLE_INITIALIZATION = C.DISABLE_INITIALIZATION /** disable INITIALIZATION events to be sent. */
 
-	// MouseButtons
-	MAIN_MOUSE_BUTTON   = C.MAIN_MOUSE_BUTTON //aka left button
-	PROP_MOUSE_BUTTON   = C.PROP_MOUSE_BUTTON //aka right button
-	MIDDLE_MOUSE_BUTTON = C.MIDDLE_MOUSE_BUTTON
-	X1_MOUSE_BUTTON     = C.X1_MOUSE_BUTTON
-	X2_MOUSE_BUTTON     = C.X2_MOUSE_BUTTON
-
 	// KeyboardStates
 	CONTROL_KEY_PRESSED = C.CONTROL_KEY_PRESSED
 	SHIFT_KEY_PRESSED   = C.SHIFT_KEY_PRESSED
@@ -84,6 +78,13 @@ const (
 	NO_DRAGGING   = C.NO_DRAGGING
 	DRAGGING_MOVE = C.DRAGGING_MOVE
 	DRAGGING_COPY = C.DRAGGING_COPY
+
+	// MouseButtons
+	MAIN_MOUSE_BUTTON   = C.MAIN_MOUSE_BUTTON //aka left button
+	PROP_MOUSE_BUTTON   = C.PROP_MOUSE_BUTTON //aka right button
+	MIDDLE_MOUSE_BUTTON = C.MIDDLE_MOUSE_BUTTON
+	X1_MOUSE_BUTTON     = C.X1_MOUSE_BUTTON
+	X2_MOUSE_BUTTON     = C.X2_MOUSE_BUTTON
 
 	// MouseEvents
 	MOUSE_ENTER  = C.MOUSE_ENTER
@@ -468,9 +469,36 @@ func HTMLayoutLoadHtmlEx(hwnd uint32, data []byte, baseUrl string) os.Error {
 
 
 
+
+
+
+
 // Hang on to any attached event handlers so that they don't
 // get garbage collected
 var eventHandlers = make(map[uintptr]EventHandler, 128)
+
+func AttachWindowEventHandler(hwnd uint32, handler EventHandler, subscription uint32) {
+	if _, exists := eventHandlers[uintptr(hwnd)]; exists {
+		eventHandlers[uintptr(hwnd)] = nil, false
+	}
+	eventHandlers[uintptr(hwnd)] = handler
+	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(uintptr(hwnd))), C.MainElementProcAddr, C.LPVOID(uintptr(hwnd)), C.UINT(subscription)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to attach event handler to window")
+	}
+}
+
+func AttachWindowEventHandlerAll(hwnd uint32, handler EventHandler) {
+	AttachWindowEventHandler(hwnd, handler, HANDLE_ALL)
+}
+
+func DetachWindowEventHandler(hwnd uint32) {
+	if handler, exists := eventHandlers[uintptr(hwnd)]; exists {
+		if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(uintptr(hwnd))), nil, C.LPVOID(uintptr(hwnd)), 0); ret != HLDOM_OK {
+			domPanic(ret, "Failed to detach event handler from window")
+		}
+		eventHandlers[uintptr(hwnd)] = handler, false
+	}
+}
 
 // Main event handler that dispatches to the right element handler
 //export goMainElementProc 
@@ -523,7 +551,7 @@ func goMainElementProc(tag uintptr, he unsafe.Pointer, evtg C.UINT, params unsaf
 				p := (*GestureParams)(params)
 				handled = handler.HandleGesture(HELEMENT(he), p)
 			default:
-				panic(fmt.Sprint("unhandled htmlayout event case: ", evtg))
+				log.Panic("unhandled htmlayout event case: ", evtg)
 			}
 		} else {
 			log.Print("Warning: No handler for tag ", tag)
