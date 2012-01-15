@@ -9,6 +9,9 @@ package gohl
 extern BOOL CALLBACK ElementProc(LPVOID tag, HELEMENT he, UINT evtg, LPVOID prms );
 extern LPELEMENT_EVENT_PROC ElementProcAddr;
 
+extern BOOL CALLBACK SelectElementCallback(HELEMENT he, LPVOID param);
+extern HTMLayoutElementCallback *SelectCallbackAddr;
+
 */
 import "C"
 
@@ -99,6 +102,7 @@ func unuse(handle HELEMENT) {
 		}
 	}
 }
+
 
 /*
 Element
@@ -193,6 +197,20 @@ func (e *Element) ReleaseCapture() {
 		panic("Failed to ReleaseCapture for element");
 	}
 }
+
+
+// Functions for querying elements
+
+func (e *Element) Select(selector string) []*Element {
+	szSelector := C.CString(selector)
+	defer C.free(unsafe.Pointer(szSelector))
+	results := make([]*Element, 0, 32)
+	if ret := C.HTMLayoutSelectElements(e.handle, (*C.CHAR)(szSelector), C.SelectCallbackAddr, C.LPVOID(unsafe.Pointer(&results))); ret != HLDOM_OK {
+		domPanic(ret, "Failed to select dom elements")
+	}
+	return results
+}
+
 
 // HTML attribute accessors/modifiers:
 

@@ -21,6 +21,15 @@ LRESULT CALLBACK NotifyProc(UINT uMsg, WPARAM wParam, LPARAM lParam, LPVOID vPar
 	return goNotifyProc(uMsg, wParam, lParam, vParam);
 }
 LPHTMLAYOUT_NOTIFY NotifyProcAddr = &NotifyProc;
+
+// Callback for results found during a select operation
+BOOL CALLBACK SelectCallback(HELEMENT he, LPVOID param)
+{
+	extern BOOL goSelectCallback(HELEMENT, LPVOID);
+	return goSelectCallback(he, param);
+}
+HTMLayoutElementCallback *SelectCallbackAddr = &SelectCallback;
+
 */
 import "C"
 
@@ -537,7 +546,7 @@ func DetachWindowEventHandler(hwnd uint32) {
 
 // Main event handler that dispatches to the right element handler
 //export goElementProc 
-func goElementProc(tag uintptr, he unsafe.Pointer, evtg C.UINT, params unsafe.Pointer) C.BOOL {
+func goElementProc(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Pointer) C.BOOL {
 	handled := false
 	key := uintptr(tag)
 	if handler, exists := eventHandlers[key]; exists {
@@ -641,5 +650,13 @@ func goNotifyProc(msg uint32, wparam uintptr, lparam uintptr, vparam uintptr) ui
 			return handler.HandleAttachBehavior((*NmhlAttachBehavior)(unsafe.Pointer(lparam)))
 		}
 	}
+	return 0
+}
+
+
+//export goSelectCallback
+func goSelectCallback(he unsafe.Pointer, param uintptr) uintptr {
+	slice := (*[]*Element)(unsafe.Pointer(param))
+	*slice = append(*slice, NewElement(HELEMENT(he)))
 	return 0
 }
