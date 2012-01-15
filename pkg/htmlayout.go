@@ -6,15 +6,21 @@ package gohl
 #include <stdlib.h>
 #include <htmlayout.h>
 
-extern BOOL goMainElementProc(LPVOID, HELEMENT, UINT, LPVOID);
-
 // Main event function that dispatches to the appropriate event handler
-BOOL CALLBACK MainElementProc(LPVOID tag, HELEMENT he, UINT evtg, LPVOID prms )
+BOOL CALLBACK ElementProc(LPVOID tag, HELEMENT he, UINT evtg, LPVOID prms)
 {
-	return goMainElementProc(tag, he, evtg, prms);
+	extern BOOL goElementProc(LPVOID, HELEMENT, UINT, LPVOID);
+	return goElementProc(tag, he, evtg, prms);
 }
+LPELEMENT_EVENT_PROC ElementProcAddr = &ElementProc;
 
-LPELEMENT_EVENT_PROC MainElementProcAddr = &MainElementProc;
+// Main event function that dispatches notify messages
+LRESULT CALLBACK NotifyProc(UINT uMsg, WPARAM wParam, LPARAM lParam, LPVOID vParam)
+{
+	extern BOOL goNotifyProc(UINT, WPARAM, LPARAM, LPVOID);
+	return goNotifyProc(uMsg, wParam, lParam, vParam);
+}
+LPHTMLAYOUT_NOTIFY NotifyProcAddr = &NotifyProc;
 */
 import "C"
 
@@ -424,42 +430,64 @@ type GestureParams struct {
 	DeltaV    float64
 }
 
-/*
-// HTMLayout Window Proc without call of DefWindowProc.
-EXTERN_C LRESULT HLAPI HTMLayoutProcND(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, BOOL* pbHandled);
-*/
-func HTMLayoutProcND(hwnd, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
+
+// Notify structures
+type NmhlCreateControl struct {
+	Header 			C.NMHDR
+	Element 		HELEMENT
+	InHwndParent	uint32
+	OutHwndControl 	uint32
+	reserved1 		int32
+	reserved2 		int32
+}
+
+type NmhlDestroyControl struct {
+	Header 				C.NMHDR
+	Element 			HELEMENT
+	InOutHwndControl	uint32
+	reserved1 			int32
+}
+
+type NmhlLoadData struct {
+	Header 			C.NMHDR
+	Uri 			*uint16
+	OutData 		uintptr
+	OutDataSize 	int32
+	DataType 		uint32
+	Principal 		HELEMENT
+	Initiator 		HELEMENT
+}
+
+type NmhlDataLoaded struct {
+	Header 			C.NMHDR
+	Uri 			*uint16
+	Data 			uintptr
+	DataSize 	int32
+	DataType 		uint32
+	Status 			uint32
+}
+
+type NmhlAttachBehavior struct {
+	Header 			C.NMHDR
+	Element 		HELEMENT
+	BehaviorName 	*byte
+	ElementProc 	uintptr
+	ElementTag 		uintptr
+	ElementEvents 	uint32
+}
+
+
+
+// Main htmlayout wndproc
+func ProcNoDefault(hwnd, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
 	var handled C.BOOL = 0
 	var result C.LRESULT = C.HTMLayoutProcND(C.HWND(C.HANDLE(uintptr(hwnd))), C.UINT(msg),
 		C.WPARAM(wparam), C.LPARAM(lparam), &handled)
 	return uintptr(result), handled != 0
 }
 
-/*
-Set \link #HTMLAYOUT_NOTIFY() notification callback function \endlink.
-
- \param[in] hWndHTMLayout \b HWND, HTMLayout window handle.
- \param[in] cb \b HTMLAYOUT_NOTIFY*, \link #HTMLAYOUT_NOTIFY() callback function \endlink.
- \param[in] cbParam \b LPVOID, parameter that will be passed to \link #HTMLAYOUT_NOTIFY() callback function \endlink as vParam paramter.
-
-EXTERN_C VOID HLAPI     HTMLayoutSetCallback(HWND hWndHTMLayout, LPHTMLAYOUT_NOTIFY cb, LPVOID cbParam);
-*/
-func HTMLayoutSetCallback(hwnd uint32, callback uintptr, callbackParam uintptr) {
-	C.HTMLayoutSetCallback(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.HTMLAYOUT_NOTIFY)(unsafe.Pointer(callback)), C.LPVOID(callbackParam))
-}
-
-/*
-Load HTML from in memory buffer with base.
-
- \param[in] hWndHTMLayout \b HWND, HTMLayout window handle.
- \param[in] html \b LPCBYTE, Address of HTML to load.
- \param[in] htmlSize \b UINT, Length of the array pointed by html parameter.
- \param[in] baseUrl \b LPCWSTR, base URL. All relative links will be resolved against this URL.
- \return \b BOOL, \c TRUE if the text was parsed and loaded successfully, FALSE otherwise.
-
-EXTERN_C BOOL HLAPI     HTMLayoutLoadHtmlEx(HWND hWndHTMLayout, LPCBYTE html, UINT htmlSize, LPCWSTR baseUrl);
-*/
-func HTMLayoutLoadHtmlEx(hwnd uint32, data []byte, baseUrl string) os.Error {
+// Load html contents into window
+func LoadHtml(hwnd uint32, data []byte, baseUrl string) os.Error {
 	if ok := C.HTMLayoutLoadHtmlEx(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.BYTE)(&data[0]),
 		C.UINT(len(data)), (*C.WCHAR)(stringToUtf16Ptr(baseUrl))); ok == 0 {
 		return os.NewError("HTMLayoutLoadHtmlEx failed")
@@ -467,6 +495,11 @@ func HTMLayoutLoadHtmlEx(hwnd uint32, data []byte, baseUrl string) os.Error {
 	return nil
 }
 
+// Call this from your NotifyHandler.HandleLoadData method if you want htmlayout to
+// process the data right away so you don't have to provide a buffer in the NmhlLoadData structure.
+func DataReady(hwnd uint32, uri *uint16, data *byte, dataLength int32) bool {
+	return C.HTMLayoutDataReady(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.WCHAR)(uri), (*C.BYTE)(data), C.DWORD(dataLength)) != 0
+}
 
 
 
@@ -478,11 +511,12 @@ func HTMLayoutLoadHtmlEx(hwnd uint32, data []byte, baseUrl string) os.Error {
 var eventHandlers = make(map[uintptr]EventHandler, 128)
 
 func AttachWindowEventHandler(hwnd uint32, handler EventHandler, subscription uint32) {
-	if _, exists := eventHandlers[uintptr(hwnd)]; exists {
-		eventHandlers[uintptr(hwnd)] = nil, false
+	key := uintptr(hwnd)
+	if _, exists := eventHandlers[key]; exists {
+		eventHandlers[key] = nil, false
 	}
-	eventHandlers[uintptr(hwnd)] = handler
-	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(uintptr(hwnd))), C.MainElementProcAddr, C.LPVOID(uintptr(hwnd)), C.UINT(subscription)); ret != HLDOM_OK {
+	eventHandlers[key] = handler
+	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key), C.UINT(subscription)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to attach event handler to window")
 	}
 }
@@ -492,73 +526,120 @@ func AttachWindowEventHandlerAll(hwnd uint32, handler EventHandler) {
 }
 
 func DetachWindowEventHandler(hwnd uint32) {
-	if handler, exists := eventHandlers[uintptr(hwnd)]; exists {
-		if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(uintptr(hwnd))), nil, C.LPVOID(uintptr(hwnd)), 0); ret != HLDOM_OK {
+	key := uintptr(hwnd)
+	if handler, exists := eventHandlers[key]; exists {
+		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from window")
 		}
-		eventHandlers[uintptr(hwnd)] = handler, false
+		eventHandlers[key] = handler, false
 	}
 }
 
 // Main event handler that dispatches to the right element handler
-//export goMainElementProc 
-func goMainElementProc(tag uintptr, he unsafe.Pointer, evtg C.UINT, params unsafe.Pointer) C.BOOL {
+//export goElementProc 
+func goElementProc(tag uintptr, he unsafe.Pointer, evtg C.UINT, params unsafe.Pointer) C.BOOL {
 	handled := false
-	if key := uintptr(tag); key != 0 {
-		if handler, exists := eventHandlers[key]; exists {
-			switch evtg {
-			case C.HANDLE_INITIALIZATION:
-				if p := (*InitializationParams)(params); p.Cmd == BEHAVIOR_ATTACH {
-					handler.Attached(HELEMENT(he))
-				} else if p.Cmd == BEHAVIOR_DETACH {
-					handler.Detached(HELEMENT(he))
-				}
-				handled = true
-			case C.HANDLE_MOUSE:
-				p := (*MouseParams)(params)
-				handled = handler.HandleMouse(HELEMENT(he), p)
-			case C.HANDLE_KEY:
-				p := (*KeyParams)(params)
-				handled = handler.HandleKey(HELEMENT(he), p)
-			case C.HANDLE_FOCUS:
-				p := (*FocusParams)(params)
-				handled = handler.HandleFocus(HELEMENT(he), p)
-			case C.HANDLE_DRAW:
-				p := (*DrawParams)(params)
-				handled = handler.HandleDraw(HELEMENT(he), p)
-			case C.HANDLE_TIMER:
-				p := (*TimerParams)(params)
-				handled = handler.HandleTimer(HELEMENT(he), p)
-			case C.HANDLE_BEHAVIOR_EVENT:
-				p := (*BehaviorEventParams)(params)
-				handled = handler.HandleBehaviorEvent(HELEMENT(he), p)
-			case C.HANDLE_METHOD_CALL:
-				p := (*MethodParams)(params)
-				handled = handler.HandleMethodCall(HELEMENT(he), p)
-			case C.HANDLE_DATA_ARRIVED:
-				p := (*DataArrivedParams)(params)
-				handled = handler.HandleDataArrived(HELEMENT(he), p)
-			case C.HANDLE_SIZE:
-				handler.HandleSize(HELEMENT(he))
-				handled = false
-			case C.HANDLE_SCROLL:
-				p := (*ScrollParams)(params)
-				handled = handler.HandleScroll(HELEMENT(he), p)
-			case C.HANDLE_EXCHANGE:
-				p := (*ExchangeParams)(params)
-				handled = handler.HandleExchange(HELEMENT(he), p)
-			case C.HANDLE_GESTURE:
-				p := (*GestureParams)(params)
-				handled = handler.HandleGesture(HELEMENT(he), p)
-			default:
-				log.Panic("unhandled htmlayout event case: ", evtg)
+	key := uintptr(tag)
+	if handler, exists := eventHandlers[key]; exists {
+		switch evtg {
+		case C.HANDLE_INITIALIZATION:
+			if p := (*InitializationParams)(params); p.Cmd == BEHAVIOR_ATTACH {
+				handler.Attached(HELEMENT(he))
+			} else if p.Cmd == BEHAVIOR_DETACH {
+				handler.Detached(HELEMENT(he))
 			}
-		} else {
-			log.Print("Warning: No handler for tag ", tag)
+			handled = true
+		case C.HANDLE_MOUSE:
+			p := (*MouseParams)(params)
+			handled = handler.HandleMouse(HELEMENT(he), p)
+		case C.HANDLE_KEY:
+			p := (*KeyParams)(params)
+			handled = handler.HandleKey(HELEMENT(he), p)
+		case C.HANDLE_FOCUS:
+			p := (*FocusParams)(params)
+			handled = handler.HandleFocus(HELEMENT(he), p)
+		case C.HANDLE_DRAW:
+			p := (*DrawParams)(params)
+			handled = handler.HandleDraw(HELEMENT(he), p)
+		case C.HANDLE_TIMER:
+			p := (*TimerParams)(params)
+			handled = handler.HandleTimer(HELEMENT(he), p)
+		case C.HANDLE_BEHAVIOR_EVENT:
+			p := (*BehaviorEventParams)(params)
+			handled = handler.HandleBehaviorEvent(HELEMENT(he), p)
+		case C.HANDLE_METHOD_CALL:
+			p := (*MethodParams)(params)
+			handled = handler.HandleMethodCall(HELEMENT(he), p)
+		case C.HANDLE_DATA_ARRIVED:
+			p := (*DataArrivedParams)(params)
+			handled = handler.HandleDataArrived(HELEMENT(he), p)
+		case C.HANDLE_SIZE:
+			handler.HandleSize(HELEMENT(he))
+			handled = false
+		case C.HANDLE_SCROLL:
+			p := (*ScrollParams)(params)
+			handled = handler.HandleScroll(HELEMENT(he), p)
+		case C.HANDLE_EXCHANGE:
+			p := (*ExchangeParams)(params)
+			handled = handler.HandleExchange(HELEMENT(he), p)
+		case C.HANDLE_GESTURE:
+			p := (*GestureParams)(params)
+			handled = handler.HandleGesture(HELEMENT(he), p)
+		default:
+			log.Panic("unhandled htmlayout event case: ", evtg)
 		}
+	} else {
+		log.Print("Warning: No handler for tag ", tag)
 	}
 	if handled {
 		return C.TRUE
 	}
 	return C.FALSE
+}
+
+
+// Hang on to any attached notify handlers so that they don't
+// get garbage collected
+var notifyHandlers = make(map[uintptr]NotifyHandler, 8)
+
+func AttachNotifyHandler(hwnd uint32, handler NotifyHandler) {
+	key := uintptr(hwnd)
+	if _, exists := notifyHandlers[key]; exists {
+		notifyHandlers[key] = nil, false
+	}
+	notifyHandlers[key] = handler
+	C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), C.NotifyProcAddr, C.LPVOID(key))
+}
+
+func DetachNotifyHandler(hwnd uint32) {
+	key := uintptr(hwnd)
+	if handler, exists := notifyHandlers[key]; exists {
+		C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), nil, nil)
+		notifyHandlers[key] = handler, false
+	}
+}
+
+//export goNotifyProc
+func goNotifyProc(msg uint32, wparam uintptr, lparam uintptr, vparam uintptr) uintptr {
+	if handler, exists := notifyHandlers[vparam]; exists {
+		phdr := (*C.NMHDR)(unsafe.Pointer(lparam))
+		
+		switch phdr.code {
+		case HLN_CREATE_CONTROL:
+			return handler.HandleCreateControl((*NmhlCreateControl)(unsafe.Pointer(lparam)))
+		case HLN_CONTROL_CREATED:
+			return handler.HandleControlCreated((*NmhlCreateControl)(unsafe.Pointer(lparam)))
+		case HLN_DESTROY_CONTROL:
+			return handler.HandleDestroyControl((*NmhlDestroyControl)(unsafe.Pointer(lparam)))
+		case HLN_LOAD_DATA:
+			return handler.HandleLoadData((*NmhlLoadData)(unsafe.Pointer(lparam)))
+		case HLN_DATA_LOADED:
+			return handler.HandleDataLoaded((*NmhlDataLoaded)(unsafe.Pointer(lparam)))
+		case HLN_DOCUMENT_COMPLETE:
+			return handler.HandleDocumentComplete()
+		case HLN_ATTACH_BEHAVIOR:
+			return handler.HandleAttachBehavior((*NmhlAttachBehavior)(unsafe.Pointer(lparam)))
+		}
+	}
+	return 0
 }

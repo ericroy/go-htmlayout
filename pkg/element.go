@@ -6,8 +6,8 @@ package gohl
 #include <stdlib.h>
 #include <htmlayout.h>
 
-extern BOOL CALLBACK MainElementProc(LPVOID tag, HELEMENT he, UINT evtg, LPVOID prms );
-extern LPELEMENT_EVENT_PROC MainElementProcAddr;
+extern BOOL CALLBACK ElementProc(LPVOID tag, HELEMENT he, UINT evtg, LPVOID prms );
+extern LPELEMENT_EVENT_PROC ElementProcAddr;
 
 */
 import "C"
@@ -154,7 +154,7 @@ func (e *Element) AttachHandler(handler EventHandler, subscription uint32) {
 	tag := handler.GetAddress()
 	if _, exists := eventHandlers[tag]; !exists {
 		eventHandlers[tag] = handler
-		if ret := C.HTMLayoutAttachEventHandlerEx(e.handle, C.MainElementProcAddr, C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutAttachEventHandlerEx(e.handle, C.ElementProcAddr, C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to attach event handler to element")
 		}
 	}
@@ -164,7 +164,7 @@ func (e *Element) AttachHandlerAll(handler EventHandler) {
 	tag := handler.GetAddress()
 	if _, exists := eventHandlers[tag]; !exists {
 		eventHandlers[tag] = handler
-		if ret := C.HTMLayoutAttachEventHandler(e.handle, C.MainElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutAttachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to attach event handler to element")
 		}
 	}
@@ -173,7 +173,7 @@ func (e *Element) AttachHandlerAll(handler EventHandler) {
 func (e *Element) DetachHandler(handler EventHandler) {
 	tag := handler.GetAddress()
 	if handler, exists := eventHandlers[tag]; exists {
-		if ret := C.HTMLayoutDetachEventHandler(e.handle, C.MainElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutDetachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from element")
 		}
 		eventHandlers[tag] = handler, false
