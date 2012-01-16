@@ -1,106 +1,43 @@
 package gohl
 
-import (
-	"log"
-	"unsafe"
-)
-
-type EventHandler interface {
-	// Should return the pointer to the actual event handler instance.  This
-	// will be used as a key to look up the event handler later when being
-	// unregistered
-	GetAddress() uintptr
-
-	// What kind of events this handler will process
-	GetSubscription() uint32
-
-	// Called when the event handler is attached to and detached from the element.
-	// These function calls are bumpers to all the others below.
-	Attached(he HELEMENT)
-	Detached(he HELEMENT)
-
-	HandleMouse(he HELEMENT, params *MouseParams) bool
-	HandleKey(he HELEMENT, params *KeyParams) bool
-	HandleFocus(he HELEMENT, params *FocusParams) bool
-	HandleDraw(he HELEMENT, params *DrawParams) bool
-	HandleTimer(he HELEMENT, params *TimerParams) bool
-	HandleBehaviorEvent(he HELEMENT, params *BehaviorEventParams) bool
-	HandleMethodCall(he HELEMENT, params *MethodParams) bool
-	HandleDataArrived(he HELEMENT, params *DataArrivedParams) bool
-	HandleSize(he HELEMENT)
-	HandleScroll(he HELEMENT, params *ScrollParams) bool
-	HandleExchange(he HELEMENT, params *ExchangeParams) bool
-	HandleGesture(he HELEMENT, params *GestureParams) bool
+type EventHandler struct {
+	OnAttached func(he HELEMENT)
+	OnDetached func(he HELEMENT)
+	OnMouse func(he HELEMENT, params *MouseParams) bool
+	OnKey func(he HELEMENT, params *KeyParams) bool
+	OnFocus func(he HELEMENT, params *FocusParams) bool
+	OnDraw func(he HELEMENT, params *DrawParams) bool
+	OnTimer func(he HELEMENT, params *TimerParams) bool
+	OnBehaviorEvent func(he HELEMENT, params *BehaviorEventParams) bool
+	OnMethodCall func(he HELEMENT, params *MethodParams) bool
+	OnDataArrived func(he HELEMENT, params *DataArrivedParams) bool
+	OnSize func(he HELEMENT)
+	OnScroll func(he HELEMENT, params *ScrollParams) bool
+	OnExchange func(he HELEMENT, params *ExchangeParams) bool
+	OnGesture func(he HELEMENT, params *GestureParams) bool
 }
 
-// Default implementation of the EventHandler interface that does nothing
-type EventHandlerBase struct {
-	subscription uint32
-}
+func (e *EventHandler) GetSubscription() uint32 {
+	var subscription uint32 = 0
+	add := func (f interface{}, flag uint32) {
+		if f != nil {
+			subscription |= flag
+		}
+	}
 
-func NewEventHandlerBase(subscription uint32) *EventHandlerBase {
-	return &EventHandlerBase{subscription}
-}
+	// OnAttached and OnDetached purposely omitted, since we must receive these events
+	add(e.OnMouse, HANDLE_MOUSE)
+	add(e.OnKey, HANDLE_KEY)
+	add(e.OnFocus, HANDLE_FOCUS)
+	add(e.OnDraw, HANDLE_DRAW)
+	add(e.OnTimer, HANDLE_TIMER)
+	add(e.OnBehaviorEvent, HANDLE_BEHAVIOR_EVENT)
+	add(e.OnMethodCall, HANDLE_METHOD_CALL)
+	add(e.OnDataArrived, HANDLE_DATA_ARRIVED)
+	add(e.OnSize, HANDLE_SIZE)
+	add(e.OnScroll, HANDLE_SCROLL)
+	add(e.OnExchange, HANDLE_EXCHANGE)
+	add(e.OnGesture, HANDLE_GESTURE)
 
-func (e *EventHandlerBase) GetAddress() uintptr {
-	return uintptr(unsafe.Pointer(e))
-}
-
-func (e *EventHandlerBase) GetSubscription() uint32 {
-	return e.subscription
-}
-
-func (e *EventHandlerBase) Attached(he HELEMENT) {
-	log.Print("Event handler attached")
-}
-
-func (e *EventHandlerBase) Detached(he HELEMENT) {
-	log.Print("Event handler detached")
-}
-
-func (e *EventHandlerBase) HandleMouse(he HELEMENT, params *MouseParams) bool {
-	return false
-}
-
-func (e *EventHandlerBase) HandleKey(he HELEMENT, params *KeyParams) bool {
-	return false
-}
-
-func (e *EventHandlerBase) HandleFocus(he HELEMENT, params *FocusParams) bool {
-	return false
-}
-
-func (e *EventHandlerBase) HandleDraw(he HELEMENT, params *DrawParams) bool {
-	return false
-}
-
-func (e *EventHandlerBase) HandleTimer(he HELEMENT, params *TimerParams) bool {
-	return false
-}
-
-func (e *EventHandlerBase) HandleBehaviorEvent(he HELEMENT, params *BehaviorEventParams) bool {
-	return false
-}
-
-func (e *EventHandlerBase) HandleMethodCall(he HELEMENT, params *MethodParams) bool {
-	return false
-}
-
-func (e *EventHandlerBase) HandleDataArrived(he HELEMENT, params *DataArrivedParams) bool {
-	return false
-}
-
-func (e *EventHandlerBase) HandleSize(he HELEMENT) {
-}
-
-func (e *EventHandlerBase) HandleScroll(he HELEMENT, params *ScrollParams) bool {
-	return false
-}
-
-func (e *EventHandlerBase) HandleExchange(he HELEMENT, params *ExchangeParams) bool {
-	return false
-}
-
-func (e *EventHandlerBase) HandleGesture(he HELEMENT, params *GestureParams) bool {
-	return false
+	return subscription
 }

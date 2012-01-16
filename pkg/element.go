@@ -152,24 +152,33 @@ func (e *Element) GetHandle() HELEMENT {
 	return e.handle
 }
 
-func (e *Element) AttachHandler(handler EventHandler) {
-	tag := handler.GetAddress()
-	if _, exists := eventHandlers[tag]; !exists {
-		eventHandlers[tag] = handler
-		if subscription := handler.GetSubscription(); subscription == HANDLE_ALL {
-			if ret := C.HTMLayoutAttachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
-				domPanic(ret, "Failed to attach event handler to element")
-			}
-		} else {
-			if ret := C.HTMLayoutAttachEventHandlerEx(e.handle, C.ElementProcAddr, C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
-				domPanic(ret, "Failed to attach event handler to element")
-			}
+func (e *Element) AttachHandler(handler *EventHandler) {
+	tag := uintptr(unsafe.Pointer(handler))
+	if _, exists := eventHandlers[tag]; exists {
+		if ret := C.HTMLayoutDetachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
+			domPanic(ret, "Failed to detach event handler from element before attaching it again")
+		}
+	}
+	eventHandlers[tag] = handler
+
+	// Don't let the caller disable ATTACH/DETACH events, otherwise we
+	// won't know when to throw out our event handler object
+	subscription := handler.GetSubscription()
+	subscription &= ^DISABLE_INITIALIZATION
+	
+	if subscription  == HANDLE_ALL {
+		if ret := C.HTMLayoutAttachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
+			domPanic(ret, "Failed to attach event handler to element")
+		}
+	} else {
+		if ret := C.HTMLayoutAttachEventHandlerEx(e.handle, C.ElementProcAddr, C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
+			domPanic(ret, "Failed to attach event handler to element")
 		}
 	}
 }
 
-func (e *Element) DetachHandler(handler EventHandler) {
-	tag := handler.GetAddress()
+func (e *Element) DetachHandler(handler *EventHandler) {
+	tag := uintptr(unsafe.Pointer(handler))
 	if handler, exists := eventHandlers[tag]; exists {
 		if ret := C.HTMLayoutDetachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from element")

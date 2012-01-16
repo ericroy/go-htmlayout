@@ -438,8 +438,16 @@ type GestureParams struct {
 }
 
 // Notify structures
+
+type NMHDR struct {
+	HwndFrom		uint32
+	IdFrom			uintptr
+	Code 			uint32
+}
+
+
 type NmhlCreateControl struct {
-	Header         C.NMHDR
+	Header         NMHDR
 	Element        HELEMENT
 	InHwndParent   uint32
 	OutHwndControl uint32
@@ -448,14 +456,14 @@ type NmhlCreateControl struct {
 }
 
 type NmhlDestroyControl struct {
-	Header           C.NMHDR
+	Header           NMHDR
 	Element          HELEMENT
 	InOutHwndControl uint32
 	reserved1        int32
 }
 
 type NmhlLoadData struct {
-	Header      C.NMHDR
+	Header      NMHDR
 	Uri         *uint16
 	OutData     uintptr
 	OutDataSize int32
@@ -465,7 +473,7 @@ type NmhlLoadData struct {
 }
 
 type NmhlDataLoaded struct {
-	Header   C.NMHDR
+	Header   NMHDR
 	Uri      *uint16
 	Data     uintptr
 	DataSize int32
@@ -474,7 +482,7 @@ type NmhlDataLoaded struct {
 }
 
 type NmhlAttachBehavior struct {
-	Header        C.NMHDR
+	Header        NMHDR
 	Element       HELEMENT
 	BehaviorName  *C.char
 	ElementProc   uintptr
@@ -507,21 +515,26 @@ func DataReady(hwnd uint32, uri *uint16, data *byte, dataLength int32) bool {
 
 // Hang on to any attached event handlers so that they don't
 // get garbage collected
-var eventHandlers = make(map[uintptr]EventHandler, 128)
+var eventHandlers = make(map[uintptr]*EventHandler, 128)
 
-func AttachWindowEventHandler(hwnd uint32, handler EventHandler, subscription uint32) {
+func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 	key := uintptr(hwnd)
 	if _, exists := eventHandlers[key]; exists {
+		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
+			domPanic(ret, "Failed to detach event handler from window before adding the new one")
+		}
 		eventHandlers[key] = nil, false
 	}
 	eventHandlers[key] = handler
+
+	// Don't let the caller disable ATTACH/DETACH events, otherwise we
+	// won't know when to throw out our event handler object
+	subscription := handler.GetSubscription()
+	subscription &= ^DISABLE_INITIALIZATION
+
 	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key), C.UINT(subscription)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to attach event handler to window")
 	}
-}
-
-func AttachWindowEventHandlerAll(hwnd uint32, handler EventHandler) {
-	AttachWindowEventHandler(hwnd, handler, HANDLE_ALL)
 }
 
 func DetachWindowEventHandler(hwnd uint32) {
@@ -537,60 +550,89 @@ func DetachWindowEventHandler(hwnd uint32) {
 // Main event handler that dispatches to the right element handler
 //export goElementProc 
 func goElementProc(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Pointer) C.BOOL {
-	handled := false
 	key := uintptr(tag)
-	if handler, exists := eventHandlers[key]; exists {
-		switch evtg {
-		case C.HANDLE_INITIALIZATION:
-			if p := (*InitializationParams)(params); p.Cmd == BEHAVIOR_ATTACH {
-				handler.Attached(HELEMENT(he))
-			} else if p.Cmd == BEHAVIOR_DETACH {
-				handler.Detached(HELEMENT(he))
-				eventHandlers[key] = handler, false
-			}
-			handled = true
-		case C.HANDLE_MOUSE:
-			p := (*MouseParams)(params)
-			handled = handler.HandleMouse(HELEMENT(he), p)
-		case C.HANDLE_KEY:
-			p := (*KeyParams)(params)
-			handled = handler.HandleKey(HELEMENT(he), p)
-		case C.HANDLE_FOCUS:
-			p := (*FocusParams)(params)
-			handled = handler.HandleFocus(HELEMENT(he), p)
-		case C.HANDLE_DRAW:
-			p := (*DrawParams)(params)
-			handled = handler.HandleDraw(HELEMENT(he), p)
-		case C.HANDLE_TIMER:
-			p := (*TimerParams)(params)
-			handled = handler.HandleTimer(HELEMENT(he), p)
-		case C.HANDLE_BEHAVIOR_EVENT:
-			p := (*BehaviorEventParams)(params)
-			handled = handler.HandleBehaviorEvent(HELEMENT(he), p)
-		case C.HANDLE_METHOD_CALL:
-			p := (*MethodParams)(params)
-			handled = handler.HandleMethodCall(HELEMENT(he), p)
-		case C.HANDLE_DATA_ARRIVED:
-			p := (*DataArrivedParams)(params)
-			handled = handler.HandleDataArrived(HELEMENT(he), p)
-		case C.HANDLE_SIZE:
-			handler.HandleSize(HELEMENT(he))
-			handled = false
-		case C.HANDLE_SCROLL:
-			p := (*ScrollParams)(params)
-			handled = handler.HandleScroll(HELEMENT(he), p)
-		case C.HANDLE_EXCHANGE:
-			p := (*ExchangeParams)(params)
-			handled = handler.HandleExchange(HELEMENT(he), p)
-		case C.HANDLE_GESTURE:
-			p := (*GestureParams)(params)
-			handled = handler.HandleGesture(HELEMENT(he), p)
-		default:
-			log.Panic("unhandled htmlayout event case: ", evtg)
-		}
-	} else {
+	if handler, exists := eventHandlers[key]; !exists {
 		log.Print("Warning: No handler for tag ", tag)
+		return C.FALSE
 	}
+
+	handled := false
+	switch evtg {
+	case C.HANDLE_INITIALIZATION:
+		if p := (*InitializationParams)(params); p.Cmd == BEHAVIOR_ATTACH {
+			if handler.OnAttached != nil {
+				handler.OnAttached(HELEMENT(he))
+			}
+		} else if p.Cmd == BEHAVIOR_DETACH {
+			if handler.OnDetached != nil {
+				handler.OnDetached(HELEMENT(he))
+			}
+			eventHandlers[key] = handler, false
+		}
+		handled = true
+	case C.HANDLE_MOUSE:
+		if handler.OnMouse != nil {
+			p := (*MouseParams)(params)
+			handled = handler.OnMouse(HELEMENT(he), p)
+		}
+	case C.HANDLE_KEY:
+		if handler.OnKey != nil {
+			p := (*KeyParams)(params)
+			handled = handler.OnKey(HELEMENT(he), p)
+		}
+	case C.HANDLE_FOCUS:
+		if handler.OnFocus != nil {
+			p := (*FocusParams)(params)
+			handled = handler.OnFocus(HELEMENT(he), p)
+		}
+	case C.HANDLE_DRAW:
+		if handler.OnDraw != nil {
+			p := (*DrawParams)(params)
+			handled = handler.OnDraw(HELEMENT(he), p)
+		}
+	case C.HANDLE_TIMER:
+		if handler.OnTimer != nil {
+			p := (*TimerParams)(params)
+			handled = handler.OnTimer(HELEMENT(he), p)
+		}
+	case C.HANDLE_BEHAVIOR_EVENT:
+		if handler.OnBehaviorEvent != nil {
+			p := (*BehaviorEventParams)(params)
+			handled = handler.OnBehaviorEvent(HELEMENT(he), p)
+		}
+	case C.HANDLE_METHOD_CALL:
+		if handler.OnMethodCall != nil {
+			p := (*MethodParams)(params)
+			handled = handler.OnMethodCall(HELEMENT(he), p)
+		}
+	case C.HANDLE_DATA_ARRIVED:
+		if handler.OnDataArrived != nil {
+			p := (*DataArrivedParams)(params)
+			handled = handler.OnDataArrived(HELEMENT(he), p)
+		}
+	case C.HANDLE_SIZE:
+		if handler.OnSize != nil {
+			handler.OnSize(HELEMENT(he))
+		}
+	case C.HANDLE_SCROLL:
+		if handler.OnScroll != nil {
+			p := (*ScrollParams)(params)
+			handled = handler.OnScroll(HELEMENT(he), p)
+		}
+	case C.HANDLE_EXCHANGE:
+		if handler.OnExchange != nil {
+			p := (*ExchangeParams)(params)
+			handled = handler.OnExchange(HELEMENT(he), p)
+		}
+	case C.HANDLE_GESTURE:
+		if handler.OnGesture != nil {
+			p := (*GestureParams)(params)
+			handled = handler.OnGesture(HELEMENT(he), p)
+		}
+	default:
+		log.Panic("unhandled htmlayout event case: ", evtg)
+	}
+
 	if handled {
 		return C.TRUE
 	}
@@ -599,9 +641,9 @@ func goElementProc(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Po
 
 // Hang on to any attached notify handlers so that they don't
 // get garbage collected
-var notifyHandlers = make(map[uintptr]NotifyHandler, 8)
+var notifyHandlers = make(map[uintptr]*NotifyHandler, 8)
 
-func AttachNotifyHandler(hwnd uint32, handler NotifyHandler) {
+func AttachNotifyHandler(hwnd uint32, handler *NotifyHandler) {
 	key := uintptr(hwnd)
 	if _, exists := notifyHandlers[key]; exists {
 		notifyHandlers[key] = nil, false
@@ -625,19 +667,37 @@ func goNotifyProc(msg uint32, wparam uintptr, lparam uintptr, vparam uintptr) ui
 
 		switch phdr.code {
 		case HLN_CREATE_CONTROL:
-			return handler.HandleCreateControl((*NmhlCreateControl)(unsafe.Pointer(lparam)))
+			if handler.OnCreateControl != nil {
+				return handler.OnCreateControl((*NmhlCreateControl)(unsafe.Pointer(lparam)))
+			}
 		case HLN_CONTROL_CREATED:
-			return handler.HandleControlCreated((*NmhlCreateControl)(unsafe.Pointer(lparam)))
+			if handler.OnControlCreated != nil {
+				return handler.OnControlCreated((*NmhlCreateControl)(unsafe.Pointer(lparam)))
+			}
 		case HLN_DESTROY_CONTROL:
-			return handler.HandleDestroyControl((*NmhlDestroyControl)(unsafe.Pointer(lparam)))
+			if handler.OnDestroyControl != nil {
+				return handler.OnDestroyControl((*NmhlDestroyControl)(unsafe.Pointer(lparam)))
+			}
 		case HLN_LOAD_DATA:
-			return handler.HandleLoadData((*NmhlLoadData)(unsafe.Pointer(lparam)))
+			if handler.OnLoadData != nil {
+				return handler.OnLoadData((*NmhlLoadData)(unsafe.Pointer(lparam)))
+			}
 		case HLN_DATA_LOADED:
-			return handler.HandleDataLoaded((*NmhlDataLoaded)(unsafe.Pointer(lparam)))
+			if handler.OnDataLoaded != nil {
+				return handler.OnDataLoaded((*NmhlDataLoaded)(unsafe.Pointer(lparam)))
+			}
 		case HLN_DOCUMENT_COMPLETE:
-			return handler.HandleDocumentComplete()
+			if handler.OnDocumentComplete != nil {
+				return handler.OnDocumentComplete()
+			}
 		case HLN_ATTACH_BEHAVIOR:
-			return handler.HandleAttachBehavior((*NmhlAttachBehavior)(unsafe.Pointer(lparam)))
+			params := (*NmhlAttachBehavior)(unsafe.Pointer(lparam))
+			key := C.GoString(params.BehaviorName)
+			if constructor, exists := handler.Behaviors[key]; exists {
+				NewElement(params.Element).AttachHandler(constructor())
+			} else {
+				log.Print("No such behavior: ", key)
+			}
 		}
 	}
 	return 0
