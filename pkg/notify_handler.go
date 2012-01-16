@@ -1,5 +1,10 @@
 package gohl
 
+import "C"
+import (
+	"log"
+)
+
 type NotifyHandler interface {
 	HandleCreateControl(params *NmhlCreateControl) uintptr
 	HandleControlCreated(params *NmhlCreateControl) uintptr
@@ -10,8 +15,23 @@ type NotifyHandler interface {
 	HandleAttachBehavior(params *NmhlAttachBehavior) uintptr
 }
 
+type EventHandlerConstructor func() EventHandler
+
 // Default implementation of the NotifyHandler interface that does nothing
 type NotifyHandlerBase struct {
+	behaviors map[string]EventHandlerConstructor
+}
+
+func NewNotifyHandlerBase() *NotifyHandlerBase {
+	return &NotifyHandlerBase{make(map[string]EventHandlerConstructor, 16)}
+}
+
+func (n *NotifyHandlerBase) RegisterBehavior(name string, constructor EventHandlerConstructor) {
+	n.behaviors[name] = constructor
+}
+
+func (n *NotifyHandlerBase) UnregisterBehavior(name string) {
+	n.behaviors[name] = nil, false
 }
 
 func (n *NotifyHandlerBase) HandleCreateControl(params *NmhlCreateControl) uintptr {
@@ -39,5 +59,11 @@ func (n *NotifyHandlerBase) HandleDocumentComplete() uintptr {
 }
 
 func (n *NotifyHandlerBase) HandleAttachBehavior(params *NmhlAttachBehavior) uintptr {
+	key := C.GoString(params.BehaviorName)
+	if constructor, exists := n.behaviors[key]; exists {
+		NewElement(params.Element).AttachHandler(constructor())
+	} else {
+		log.Panic("No such behavior: ", key)
+	}
 	return 0
 }

@@ -11,6 +11,9 @@ type EventHandler interface {
 	// unregistered
 	GetAddress() uintptr
 
+	// What kind of events this handler will process
+	GetSubscription() uint32
+
 	// Called when the event handler is attached to and detached from the element.
 	// These function calls are bumpers to all the others below.
 	Attached(he HELEMENT)
@@ -31,10 +34,20 @@ type EventHandler interface {
 }
 
 // Default implementation of the EventHandler interface that does nothing
-type EventHandlerBase struct{}
+type EventHandlerBase struct {
+	subscription uint32
+}
+
+func NewEventHandlerBase(subscription uint32) *EventHandlerBase {
+	return &EventHandlerBase{subscription}
+}
 
 func (e *EventHandlerBase) GetAddress() uintptr {
 	return uintptr(unsafe.Pointer(e))
+}
+
+func (e *EventHandlerBase) GetSubscription() uint32 {
+	return e.subscription
 }
 
 func (e *EventHandlerBase) Attached(he HELEMENT) {

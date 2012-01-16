@@ -1,12 +1,17 @@
 
+.PHONY: default test install clean format
+
 default:
-	cd pkg; make
+	gomake -C pkg
 
 test:
-	cd pkg; make test
+	gomake -C pkg test
 
 install:
-	cd pkg; make install
+	gomake -C pkg install
 
 clean:
-	cd pkg; make clean
+	gomake -C pkg clean
+
+format:
+	gomake -C pkg format

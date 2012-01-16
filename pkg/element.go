@@ -44,7 +44,6 @@ var errorToString = map[C.HLDOM_RESULT]string{
 	C.HLDOM_OK_NOT_HANDLED:    "HLDOM_OK_NOT_HANDLED",
 }
 
-
 // DomError represents an htmlayout error with an associated
 // dom error code
 type DomError struct {
@@ -103,7 +102,6 @@ func unuse(handle HELEMENT) {
 	}
 }
 
-
 /*
 Element
 
@@ -154,22 +152,18 @@ func (e *Element) GetHandle() HELEMENT {
 	return e.handle
 }
 
-func (e *Element) AttachHandler(handler EventHandler, subscription uint32) {
+func (e *Element) AttachHandler(handler EventHandler) {
 	tag := handler.GetAddress()
 	if _, exists := eventHandlers[tag]; !exists {
 		eventHandlers[tag] = handler
-		if ret := C.HTMLayoutAttachEventHandlerEx(e.handle, C.ElementProcAddr, C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
-			domPanic(ret, "Failed to attach event handler to element")
-		}
-	}
-}
-
-func (e *Element) AttachHandlerAll(handler EventHandler) {
-	tag := handler.GetAddress()
-	if _, exists := eventHandlers[tag]; !exists {
-		eventHandlers[tag] = handler
-		if ret := C.HTMLayoutAttachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
-			domPanic(ret, "Failed to attach event handler to element")
+		if subscription := handler.GetSubscription(); subscription == HANDLE_ALL {
+			if ret := C.HTMLayoutAttachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
+				domPanic(ret, "Failed to attach event handler to element")
+			}
+		} else {
+			if ret := C.HTMLayoutAttachEventHandlerEx(e.handle, C.ElementProcAddr, C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
+				domPanic(ret, "Failed to attach event handler to element")
+			}
 		}
 	}
 }
@@ -194,10 +188,9 @@ func (e *Element) SetCapture() {
 
 func (e *Element) ReleaseCapture() {
 	if ok := C.ReleaseCapture(); ok == 0 {
-		panic("Failed to ReleaseCapture for element");
+		panic("Failed to ReleaseCapture for element")
 	}
 }
-
 
 // Functions for querying elements
 
@@ -210,7 +203,6 @@ func (e *Element) Select(selector string) []*Element {
 	}
 	return results
 }
-
 
 // HTML attribute accessors/modifiers:
 
@@ -254,15 +246,16 @@ func (e *Element) SetAttr(key string, value interface{}) {
 	szKey := C.CString(key)
 	defer C.free(unsafe.Pointer(szKey))
 	var ret C.HLDOM_RESULT = HLDOM_OK
-	if v, ok := value.(string); ok {
+	switch v := value.(type) {
+	case string:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(v)))
-	} else if v, ok := value.(float32); ok {
+	case float32:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Ftoa32(v, 'e', 6))))
-	} else if v, ok := value.(int); ok {
+	case int:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Itoa(v))))
-	} else if value == nil {
+	case nil:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), nil)
-	} else {
+	default:
 		log.Panic("Don't know how to format this argument type")
 	}
 	if ret != HLDOM_OK {
@@ -340,15 +333,16 @@ func (e *Element) SetStyle(key string, value interface{}) {
 	szKey := C.CString(key)
 	defer C.free(unsafe.Pointer(szKey))
 	var ret C.HLDOM_RESULT = HLDOM_OK
-	if v, ok := value.(string); ok {
+	switch v := value.(type) {
+	case string:
 		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(v)))
-	} else if v, ok := value.(float32); ok {
+	case float32:
 		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Ftoa32(v, 'e', 6))))
-	} else if v, ok := value.(int); ok {
+	case int:
 		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Itoa(v))))
-	} else if value == nil {
+	case nil:
 		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), nil)
-	} else {
+	default:
 		log.Panic("Don't know how to format this argument type")
 	}
 	if ret != HLDOM_OK {

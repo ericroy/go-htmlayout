@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	
+
 	// HTMLayout Notify Events
 	HLN_CREATE_CONTROL    = C.HLN_CREATE_CONTROL
 	HLN_LOAD_DATA         = C.HLN_LOAD_DATA
@@ -54,7 +54,6 @@ const (
 	HLN_DIALOG_CREATED    = C.HLN_DIALOG_CREATED
 	HLN_DIALOG_CLOSE_RQ   = C.HLN_DIALOG_CLOSE_RQ
 	HLN_DOCUMENT_LOADED   = C.HLN_DOCUMENT_LOADED
-
 
 	// PhaseMask
 	BUBBLING = uint32(C.BUBBLING) // bubbling (emersion) phase
@@ -312,13 +311,12 @@ const (
 	TEXT_EDIT_GET_SELECTION_TEXT = C.TEXT_EDIT_GET_SELECTION_TEXT // p - TEXT_SELECTION_PARAMS, OutputStreamProc will receive stream of WCHARs
 	TEXT_EDIT_GET_SELECTION_HTML = C.TEXT_EDIT_GET_SELECTION_HTML // p - TEXT_SELECTION_PARAMS, OutputStreamProc will receive stream of BYTEs - utf8 encoded html fragment.
 	TEXT_EDIT_CHAR_POS_AT_XY     = C.TEXT_EDIT_CHAR_POS_AT_XY     // p - TEXT_EDIT_CHAR_POS_AT_XY_PARAMS
-	IS_EMPTY                     = C.IS_EMPTY                       // p - IS_EMPTY_PARAMS // set VALUE_PARAMS::is_empty (false/true) reflects :empty state of the element.
-	GET_VALUE                    = C.GET_VALUE                      // p - VALUE_PARAMS 
-	SET_VALUE                    = C.SET_VALUE                      // p - VALUE_PARAMS 
-	XCALL                        = C.XCALL                          // p - XCALL_PARAMS
+	IS_EMPTY                     = C.IS_EMPTY                     // p - IS_EMPTY_PARAMS // set VALUE_PARAMS::is_empty (false/true) reflects :empty state of the element.
+	GET_VALUE                    = C.GET_VALUE                    // p - VALUE_PARAMS 
+	SET_VALUE                    = C.SET_VALUE                    // p - VALUE_PARAMS 
+	XCALL                        = C.XCALL                        // p - XCALL_PARAMS
 	FIRST_APPLICATION_METHOD_ID  = C.FIRST_APPLICATION_METHOD_ID
 )
-
 
 type HELEMENT C.HELEMENT
 
@@ -439,53 +437,50 @@ type GestureParams struct {
 	DeltaV    float64
 }
 
-
 // Notify structures
 type NmhlCreateControl struct {
-	Header 			C.NMHDR
-	Element 		HELEMENT
-	InHwndParent	uint32
-	OutHwndControl 	uint32
-	reserved1 		int32
-	reserved2 		int32
+	Header         C.NMHDR
+	Element        HELEMENT
+	InHwndParent   uint32
+	OutHwndControl uint32
+	reserved1      int32
+	reserved2      int32
 }
 
 type NmhlDestroyControl struct {
-	Header 				C.NMHDR
-	Element 			HELEMENT
-	InOutHwndControl	uint32
-	reserved1 			int32
+	Header           C.NMHDR
+	Element          HELEMENT
+	InOutHwndControl uint32
+	reserved1        int32
 }
 
 type NmhlLoadData struct {
-	Header 			C.NMHDR
-	Uri 			*uint16
-	OutData 		uintptr
-	OutDataSize 	int32
-	DataType 		uint32
-	Principal 		HELEMENT
-	Initiator 		HELEMENT
+	Header      C.NMHDR
+	Uri         *uint16
+	OutData     uintptr
+	OutDataSize int32
+	DataType    uint32
+	Principal   HELEMENT
+	Initiator   HELEMENT
 }
 
 type NmhlDataLoaded struct {
-	Header 			C.NMHDR
-	Uri 			*uint16
-	Data 			uintptr
-	DataSize 	int32
-	DataType 		uint32
-	Status 			uint32
+	Header   C.NMHDR
+	Uri      *uint16
+	Data     uintptr
+	DataSize int32
+	DataType uint32
+	Status   uint32
 }
 
 type NmhlAttachBehavior struct {
-	Header 			C.NMHDR
-	Element 		HELEMENT
-	BehaviorName 	*byte
-	ElementProc 	uintptr
-	ElementTag 		uintptr
-	ElementEvents 	uint32
+	Header        C.NMHDR
+	Element       HELEMENT
+	BehaviorName  *C.char
+	ElementProc   uintptr
+	ElementTag    uintptr
+	ElementEvents uint32
 }
-
-
 
 // Main htmlayout wndproc
 func ProcNoDefault(hwnd, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
@@ -509,11 +504,6 @@ func LoadHtml(hwnd uint32, data []byte, baseUrl string) os.Error {
 func DataReady(hwnd uint32, uri *uint16, data *byte, dataLength int32) bool {
 	return C.HTMLayoutDataReady(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.WCHAR)(uri), (*C.BYTE)(data), C.DWORD(dataLength)) != 0
 }
-
-
-
-
-
 
 // Hang on to any attached event handlers so that they don't
 // get garbage collected
@@ -606,7 +596,6 @@ func goElementProc(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Po
 	return C.FALSE
 }
 
-
 // Hang on to any attached notify handlers so that they don't
 // get garbage collected
 var notifyHandlers = make(map[uintptr]NotifyHandler, 8)
@@ -632,7 +621,7 @@ func DetachNotifyHandler(hwnd uint32) {
 func goNotifyProc(msg uint32, wparam uintptr, lparam uintptr, vparam uintptr) uintptr {
 	if handler, exists := notifyHandlers[vparam]; exists {
 		phdr := (*C.NMHDR)(unsafe.Pointer(lparam))
-		
+
 		switch phdr.code {
 		case HLN_CREATE_CONTROL:
 			return handler.HandleCreateControl((*NmhlCreateControl)(unsafe.Pointer(lparam)))
@@ -652,7 +641,6 @@ func goNotifyProc(msg uint32, wparam uintptr, lparam uintptr, vparam uintptr) ui
 	}
 	return 0
 }
-
 
 //export goSelectCallback
 func goSelectCallback(he unsafe.Pointer, param uintptr) uintptr {
