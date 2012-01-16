@@ -546,6 +546,7 @@ func goElementProc(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Po
 				handler.Attached(HELEMENT(he))
 			} else if p.Cmd == BEHAVIOR_DETACH {
 				handler.Detached(HELEMENT(he))
+				eventHandlers[key] = handler, false
 			}
 			handled = true
 		case C.HANDLE_MOUSE:

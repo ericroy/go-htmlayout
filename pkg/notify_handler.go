@@ -63,7 +63,7 @@ func (n *NotifyHandlerBase) HandleAttachBehavior(params *NmhlAttachBehavior) uin
 	if constructor, exists := n.behaviors[key]; exists {
 		NewElement(params.Element).AttachHandler(constructor())
 	} else {
-		log.Panic("No such behavior: ", key)
+		log.Print("No such behavior: ", key)
 	}
 	return 0
 }
