@@ -283,6 +283,51 @@ func (e *Element) GetParent() *Element {
 	return nil
 }
 
+func (e *Element) InsertChild(child *Element, index int) {
+	if ret := C.HTMLayoutInsertElement(e.handle, child.handle, C.UINT(index)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to insert child element at index: ", index)
+	}
+}
+
+func (e *Element) AppendChild(child *Element) {
+	count := e.GetChildCount()
+	if ret := C.HTMLayoutInsertElement(e.handle, child.handle, C.UINT(count)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to append child element")
+	}
+}
+
+func (e *Element) Detach() {
+	if ret := C.HTMLayoutDetachElement(e.handle); ret != HLDOM_OK {
+		domPanic(ret, "Failed to detach element from dom")
+	}
+}
+
+func (e *Element) SetTimer(ms int) {
+	if ret := C.HTMLayoutSetTimer(e.handle, C.UINT(ms)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to set timer")
+	}
+}
+
+func (e *Element) CancelTimer() {
+	e.SetTimer(0)
+}
+
+func (e *Element) GetHwnd() uint32 {
+	var hwnd uint32
+	if ret := C.HTMLayoutGetElementHwnd(e.handle, (*C.HWND)(unsafe.Pointer(&hwnd)), 0); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get element's hwnd")
+	}
+	return hwnd
+}
+
+func (e *Element) GetRootHwnd() uint32 {
+	var hwnd uint32
+	if ret := C.HTMLayoutGetElementHwnd(e.handle, (*C.HWND)(unsafe.Pointer(&hwnd)), 1); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get element's root hwnd")
+	}
+	return hwnd
+}
+
 func (e *Element) GetHtml() string {
 	var data *C.char
 	if ret := C.HTMLayoutGetElementHtml(e.handle, (*C.LPBYTE)(unsafe.Pointer(data)), C.BOOL(0)); ret != HLDOM_OK {
