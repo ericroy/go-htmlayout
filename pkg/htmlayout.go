@@ -316,6 +316,16 @@ const (
 	SET_VALUE                    = C.SET_VALUE                    // p - VALUE_PARAMS 
 	XCALL                        = C.XCALL                        // p - XCALL_PARAMS
 	FIRST_APPLICATION_METHOD_ID  = C.FIRST_APPLICATION_METHOD_ID
+
+
+	// Content insertion locations
+	SIH_REPLACE_CONTENT = C.SIH_REPLACE_CONTENT
+	SIH_INSERT_AT_START = C.SIH_INSERT_AT_START
+	SIH_APPEND_AFTER_LAST = C.SIH_APPEND_AFTER_LAST
+	SOH_REPLACE = C.SOH_REPLACE
+	SOH_INSERT_BEFORE = C.SOH_INSERT_BEFORE
+	SOH_INSERT_AFTER = C.SOH_INSERT_AFTER
+
 )
 
 type HELEMENT C.HELEMENT
@@ -551,7 +561,10 @@ func DetachWindowEventHandler(hwnd uint32) {
 //export goElementProc 
 func goElementProc(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Pointer) C.BOOL {
 	key := uintptr(tag)
-	if handler, exists := eventHandlers[key]; !exists {
+
+	var handler *EventHandler
+	var exists bool
+	if handler, exists = eventHandlers[key]; !exists {
 		log.Print("Warning: No handler for tag ", tag)
 		return C.FALSE
 	}

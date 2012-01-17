@@ -55,8 +55,8 @@ func (self DomError) String() string {
 	return fmt.Sprintf("%s: %s", errorToString[self.Result], self.Message)
 }
 
-func domPanic(result C.HLDOM_RESULT, message string) {
-	log.Panic(DomError{result, message})
+func domPanic(result C.HLDOM_RESULT, message... interface{}) {
+	log.Panic(DomError{result, fmt.Sprint(message...)})
 }
 
 // Returns the utf-16 encoding of the utf-8 string s,
@@ -113,6 +113,9 @@ type Element struct {
 
 // Constructors
 func NewElement(h HELEMENT) *Element {
+	if h == nil {
+		panic("Nil helement")
+	}
 	e := &Element{nil}
 	e.setHandle(h)
 	runtime.SetFinalizer(e, (*Element).finalize)
@@ -126,6 +129,18 @@ func GetRootElement(hwnd uint32) *Element {
 	}
 	return NewElement(handle)
 }
+
+func GetFocusElement(hwnd uint32) *Element {
+	var handle HELEMENT = nil
+	if ret := C.HTMLayoutGetFocusElement(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.HELEMENT)(&handle)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get focus element")
+	}
+	if handle != nil {
+		return NewElement(handle)
+	}
+	return nil
+}
+
 
 // Finalizer method, only to be called from Release or by
 // the Go runtime
@@ -189,15 +204,25 @@ func (e *Element) DetachHandler(handler *EventHandler) {
 	}
 }
 
+func (e *Element) Update(render bool) {
+	var shouldRender C.BOOL
+	if render {
+		shouldRender = C.BOOL(1)
+	}
+	if ret := C.HTMLayoutUpdateElement(e.handle, shouldRender); ret != HLDOM_OK {
+		domPanic(ret, "Failed to update element")
+	}
+}
+
 func (e *Element) SetCapture() {
 	if ret := C.HTMLayoutSetCapture(e.handle); ret != HLDOM_OK {
-		domPanic(ret, "Failed to SetCapture for element")
+		domPanic(ret, "Failed to set capture for element")
 	}
 }
 
 func (e *Element) ReleaseCapture() {
 	if ok := C.ReleaseCapture(); ok == 0 {
-		panic("Failed to ReleaseCapture for element")
+		panic("Failed to release capture for element")
 	}
 }
 
@@ -208,9 +233,110 @@ func (e *Element) Select(selector string) []*Element {
 	defer C.free(unsafe.Pointer(szSelector))
 	results := make([]*Element, 0, 32)
 	if ret := C.HTMLayoutSelectElements(e.handle, (*C.CHAR)(szSelector), C.SelectCallbackAddr, C.LPVOID(unsafe.Pointer(&results))); ret != HLDOM_OK {
-		domPanic(ret, "Failed to select dom elements")
+		domPanic(ret, "Failed to select dom elements, selector: '", selector, "'")
 	}
 	return results
+}
+
+// DOM structure accessors/modifiers:
+
+func (e *Element) GetChildCount() int {
+	var count C.UINT
+	if ret := C.HTMLayoutGetChildrenCount(e.handle, &count); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get child count")
+	}
+	return int(count)
+}
+
+func (e *Element) GetChild(index int) *Element {
+	var child C.HELEMENT
+	if ret := C.HTMLayoutGetNthChild(e.handle, C.UINT(index), &child); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get child at index: ", index)
+	}
+	return NewElement(HELEMENT(child))
+}
+
+func (e *Element) GetChildren() []*Element {
+	slice := make([]*Element, 0, 32)
+	for i := 0; i < e.GetChildCount(); i++ {
+		slice = append(slice, e.GetChild(i))
+	}
+	return slice
+}
+
+func (e *Element) GetIndex() int {
+	var index C.UINT
+	if ret := C.HTMLayoutGetElementIndex(e.handle, &index); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get element's index")
+	}
+	return int(index)
+}
+
+func (e *Element) GetParent() *Element {
+	var parent C.HELEMENT
+	if ret := C.HTMLayoutGetParentElement(e.handle, &parent); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get parent")
+	}
+	if parent != nil {
+		return NewElement(HELEMENT(parent))
+	}
+	return nil
+}
+
+func (e *Element) GetHtml() string {
+	var data *C.char
+	if ret := C.HTMLayoutGetElementHtml(e.handle, (*C.LPBYTE)(unsafe.Pointer(data)), C.BOOL(0)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get inner html")
+	}
+	return C.GoString(data)
+}
+
+func (e *Element) GetOuterHtml() string {
+	var data *C.char
+	if ret := C.HTMLayoutGetElementHtml(e.handle, (*C.LPBYTE)(unsafe.Pointer(data)), C.BOOL(1)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get inner html")
+	}
+	return C.GoString(data)
+}
+
+func (e *Element) GetType() string {
+	var data *C.char
+	if ret := C.HTMLayoutGetElementType(e.handle, (*C.LPCSTR)(unsafe.Pointer(data))); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get element type")
+	}
+	return C.GoString(data)
+}
+
+func (e *Element) SetHtml(html string) {
+	szHtml := C.CString(html)
+	defer C.free(unsafe.Pointer(szHtml))
+	if ret := C.HTMLayoutSetElementHtml(e.handle, (*C.BYTE)(unsafe.Pointer(szHtml)), C.DWORD(len(html)), SIH_REPLACE_CONTENT); ret != HLDOM_OK {
+		domPanic(ret, "Failed to replace element's html")
+	}
+}
+
+func (e *Element) PrependHtml(prefix string) {
+	szHtml := C.CString(prefix)
+	defer C.free(unsafe.Pointer(szHtml))
+	if ret := C.HTMLayoutSetElementHtml(e.handle, (*C.BYTE)(unsafe.Pointer(szHtml)), C.DWORD(len(prefix)), SIH_INSERT_AT_START); ret != HLDOM_OK {
+		domPanic(ret, "Failed to prepend to element's html")
+	}
+}
+
+func (e *Element) AppendHtml(suffix string) {
+	szHtml := C.CString(suffix)
+	defer C.free(unsafe.Pointer(szHtml))
+	if ret := C.HTMLayoutSetElementHtml(e.handle, (*C.BYTE)(unsafe.Pointer(szHtml)), C.DWORD(len(suffix)), SIH_APPEND_AFTER_LAST); ret != HLDOM_OK {
+		domPanic(ret, "Failed to append to element's html")
+	}
+}
+
+func (e *Element) SetText(text string) {
+	szText := C.CString(text)
+	defer C.free(unsafe.Pointer(szText))
+	if ret := C.HTMLayoutSetElementInnerText(e.handle, (*C.BYTE)(unsafe.Pointer(szText)), C.UINT(len(text))); ret != HLDOM_OK {
+		domPanic(ret, "Failed to replace element's text")
+	}
 }
 
 // HTML attribute accessors/modifiers:
