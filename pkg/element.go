@@ -12,6 +12,8 @@ extern LPELEMENT_EVENT_PROC ElementProcAddr;
 extern BOOL CALLBACK SelectElementCallback(HELEMENT he, LPVOID param);
 extern HTMLayoutElementCallback *SelectCallbackAddr;
 
+extern INT ElementComparator(HELEMENT he1, HELEMENT he2, LPVOID pArg);
+extern ELEMENT_COMPARATOR *ElementComparatorAddr;
 */
 import "C"
 
@@ -167,6 +169,10 @@ func (e *Element) GetHandle() HELEMENT {
 	return e.handle
 }
 
+func (e *Element) Equals(other *Element) bool {
+	return e.handle == other.handle
+}
+
 func (e *Element) AttachHandler(handler *EventHandler) {
 	tag := uintptr(unsafe.Pointer(handler))
 	if _, exists := eventHandlers[tag]; exists {
@@ -238,17 +244,50 @@ func (e *Element) Select(selector string) []*Element {
 	return results
 }
 
+// Searches up the parent chain to find the first element that matches the given selector.
+// Includes the element in the search.  Depth indicates how far the search should progress.
+// Depth = 1 means only consider this element.  Depth = 0 means search all the way up to the
+// root.  Any other positive value of depth limits the length of the search.
+func (e *Element) SelectParentLimit(selector string, depth int) *Element {
+	szSelector := C.CString(selector)
+	defer C.free(unsafe.Pointer(szSelector))
+	var parent C.HELEMENT
+	if ret := C.HTMLayoutSelectParent(e.handle, (*C.CHAR)(szSelector), C.UINT(depth), &parent); ret != HLDOM_OK {
+		domPanic(ret, "Failed to select parent dom elements, selector: '", selector, "'")
+	}
+	if parent != nil {
+		return NewElement(HELEMENT(parent))
+	}
+	return nil
+}
+
+func (e *Element) SelectParent(selector string) *Element {
+	return e.SelectParentLimit(selector, 0)
+}
+
+
+// For delivering programmatic events to the elements
+// Returns true if the event was handled, false otherwise
+func (e *Element) SendEvent(destination *Element, eventCode uint, source *Element, reason uintptr) bool {
+	var handled C.BOOL = 0
+	if ret := C.HTMLayoutSendEvent(destination.handle, C.UINT(eventCode), source.handle, C.UINT_PTR(reason), &handled); ret != HLDOM_OK {
+		domPanic(ret, "Failed to send event")
+	}
+	return handled != 0
+}
+
+
 // DOM structure accessors/modifiers:
 
-func (e *Element) GetChildCount() int {
+func (e *Element) GetChildCount() uint {
 	var count C.UINT
 	if ret := C.HTMLayoutGetChildrenCount(e.handle, &count); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get child count")
 	}
-	return int(count)
+	return uint(count)
 }
 
-func (e *Element) GetChild(index int) *Element {
+func (e *Element) GetChild(index uint) *Element {
 	var child C.HELEMENT
 	if ret := C.HTMLayoutGetNthChild(e.handle, C.UINT(index), &child); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get child at index: ", index)
@@ -258,18 +297,18 @@ func (e *Element) GetChild(index int) *Element {
 
 func (e *Element) GetChildren() []*Element {
 	slice := make([]*Element, 0, 32)
-	for i := 0; i < e.GetChildCount(); i++ {
+	for i := uint(0); i < e.GetChildCount(); i++ {
 		slice = append(slice, e.GetChild(i))
 	}
 	return slice
 }
 
-func (e *Element) GetIndex() int {
+func (e *Element) GetIndex() uint {
 	var index C.UINT
 	if ret := C.HTMLayoutGetElementIndex(e.handle, &index); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get element's index")
 	}
-	return int(index)
+	return uint(index)
 }
 
 func (e *Element) GetParent() *Element {
@@ -283,7 +322,7 @@ func (e *Element) GetParent() *Element {
 	return nil
 }
 
-func (e *Element) InsertChild(child *Element, index int) {
+func (e *Element) InsertChild(child *Element, index uint) {
 	if ret := C.HTMLayoutInsertElement(e.handle, child.handle, C.UINT(index)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to insert child element at index: ", index)
 	}
@@ -300,6 +339,42 @@ func (e *Element) Detach() {
 	if ret := C.HTMLayoutDetachElement(e.handle); ret != HLDOM_OK {
 		domPanic(ret, "Failed to detach element from dom")
 	}
+}
+
+func (e *Element) Delete() {
+	if ret := C.HTMLayoutDeleteElement(e.handle); ret != HLDOM_OK {
+		domPanic(ret, "Failed to delete element from dom")
+	}
+	e.finalize()
+}
+
+// Makes a deep clone of the receiver, the resulting subtree is not attached to the dom.
+func (e *Element) Clone() *Element {
+	var clone C.HELEMENT
+	if ret := C.HTMLayoutCloneElement(e.handle, &clone); ret != HLDOM_OK {
+		domPanic(ret, "Failed to clone element")
+	}
+	return NewElement(HELEMENT(clone))
+}
+
+func (e *Element) Swap(other *Element) {
+	if ret := C.HTMLayoutSwapElements(e.handle, other.handle); ret != HLDOM_OK {
+		domPanic(ret, "Failed to swap elements")
+	}
+}
+
+// Sorts 'count' child elements starting at index 'start'.  Uses comparator to define the
+// order.  Comparator should return -1, or 0, or 1 to indicate less, equal or greater
+func (e *Element) SortChildrenRange(start, count uint, comparator func(*Element, *Element) int) {
+	end := start + count
+	arg := uintptr(unsafe.Pointer(&comparator))
+	if ret := C.HTMLayoutSortElements(e.handle, C.UINT(start), C.UINT(end), C.ElementComparatorAddr, C.LPVOID(arg)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to sort elements")
+	}
+}
+
+func (e *Element) SortChildren(comparator func(*Element, *Element) int) {
+	e.SortChildrenRange(0, e.GetChildCount(), comparator)
 }
 
 func (e *Element) SetTimer(ms int) {
@@ -447,28 +522,28 @@ func (e *Element) RemoveAttr(key string) {
 	e.SetAttr(key, nil)
 }
 
-func (e *Element) GetAttrValueByIndex(index int) string {
+func (e *Element) GetAttrValueByIndex(index uint) string {
 	szValue := (*C.WCHAR)(nil)
-	if ret := C.HTMLayoutGetNthAttribute(e.handle, (C.UINT)(index), nil, (*C.LPCWSTR)(&szValue)); ret != HLDOM_OK {
-		domPanic(ret, fmt.Sprintf("Failed to get attribute name by index: %d", index))
+	if ret := C.HTMLayoutGetNthAttribute(e.handle, C.UINT(index), nil, (*C.LPCWSTR)(&szValue)); ret != HLDOM_OK {
+		domPanic(ret, fmt.Sprintf("Failed to get attribute name by index: %u", index))
 	}
 	return utf16ToString((*uint16)(szValue))
 }
 
-func (e *Element) GetAttrNameByIndex(index int) string {
+func (e *Element) GetAttrNameByIndex(index uint) string {
 	szName := (*C.CHAR)(nil)
-	if ret := C.HTMLayoutGetNthAttribute(e.handle, (C.UINT)(index), (*C.LPCSTR)(&szName), nil); ret != HLDOM_OK {
-		domPanic(ret, fmt.Sprintf("Failed to get attribute name by index: %d", index))
+	if ret := C.HTMLayoutGetNthAttribute(e.handle, C.UINT(index), (*C.LPCSTR)(&szName), nil); ret != HLDOM_OK {
+		domPanic(ret, fmt.Sprintf("Failed to get attribute name by index: %u", index))
 	}
 	return C.GoString((*C.char)(szName))
 }
 
-func (e *Element) GetAttrCount(index int) int {
+func (e *Element) GetAttrCount(index uint) uint {
 	var count C.UINT = 0
 	if ret := C.HTMLayoutGetAttributeCount(e.handle, &count); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get attribute count")
 	}
-	return int(count)
+	return uint(count)
 }
 
 // CSS style attribute accessors/mutators

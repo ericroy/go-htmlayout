@@ -30,6 +30,14 @@ BOOL CALLBACK SelectCallback(HELEMENT he, LPVOID param)
 }
 HTMLayoutElementCallback *SelectCallbackAddr = &SelectCallback;
 
+
+INT ElementComparator(HELEMENT he1, HELEMENT he2, LPVOID pArg)
+{
+	extern INT goElementComparator(HELEMENT, HELEMENT, LPVOID);
+	return goElementComparator(he1, he2, pArg);
+}
+ELEMENT_COMPARATOR *ElementComparatorAddr = (ELEMENT_COMPARATOR *)&ElementComparator;
+
 */
 import "C"
 
@@ -328,6 +336,15 @@ const (
 
 )
 
+var (
+	// Hold a reference to handlers that are in-use so that they don't
+	// get garbage collected.
+	notifyHandlers = make(map[uintptr]*NotifyHandler, 8)
+	eventHandlers = make(map[uintptr]*EventHandler, 128)
+)
+
+
+
 type HELEMENT C.HELEMENT
 
 type Point struct {
@@ -500,62 +517,6 @@ type NmhlAttachBehavior struct {
 	ElementEvents uint32
 }
 
-// Main htmlayout wndproc
-func ProcNoDefault(hwnd, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
-	var handled C.BOOL = 0
-	var result C.LRESULT = C.HTMLayoutProcND(C.HWND(C.HANDLE(uintptr(hwnd))), C.UINT(msg),
-		C.WPARAM(wparam), C.LPARAM(lparam), &handled)
-	return uintptr(result), handled != 0
-}
-
-// Load html contents into window
-func LoadHtml(hwnd uint32, data []byte, baseUrl string) os.Error {
-	if ok := C.HTMLayoutLoadHtmlEx(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.BYTE)(&data[0]),
-		C.UINT(len(data)), (*C.WCHAR)(stringToUtf16Ptr(baseUrl))); ok == 0 {
-		return os.NewError("HTMLayoutLoadHtmlEx failed")
-	}
-	return nil
-}
-
-// Call this from your NotifyHandler.HandleLoadData method if you want htmlayout to
-// process the data right away so you don't have to provide a buffer in the NmhlLoadData structure.
-func DataReady(hwnd uint32, uri *uint16, data *byte, dataLength int32) bool {
-	return C.HTMLayoutDataReady(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.WCHAR)(uri), (*C.BYTE)(data), C.DWORD(dataLength)) != 0
-}
-
-// Hang on to any attached event handlers so that they don't
-// get garbage collected
-var eventHandlers = make(map[uintptr]*EventHandler, 128)
-
-func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
-	key := uintptr(hwnd)
-	if _, exists := eventHandlers[key]; exists {
-		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
-			domPanic(ret, "Failed to detach event handler from window before adding the new one")
-		}
-		eventHandlers[key] = nil, false
-	}
-	eventHandlers[key] = handler
-
-	// Don't let the caller disable ATTACH/DETACH events, otherwise we
-	// won't know when to throw out our event handler object
-	subscription := handler.GetSubscription()
-	subscription &= ^DISABLE_INITIALIZATION
-
-	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key), C.UINT(subscription)); ret != HLDOM_OK {
-		domPanic(ret, "Failed to attach event handler to window")
-	}
-}
-
-func DetachWindowEventHandler(hwnd uint32) {
-	key := uintptr(hwnd)
-	if handler, exists := eventHandlers[key]; exists {
-		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
-			domPanic(ret, "Failed to detach event handler from window")
-		}
-		eventHandlers[key] = handler, false
-	}
-}
 
 // Main event handler that dispatches to the right element handler
 //export goElementProc 
@@ -652,27 +613,6 @@ func goElementProc(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Po
 	return C.FALSE
 }
 
-// Hang on to any attached notify handlers so that they don't
-// get garbage collected
-var notifyHandlers = make(map[uintptr]*NotifyHandler, 8)
-
-func AttachNotifyHandler(hwnd uint32, handler *NotifyHandler) {
-	key := uintptr(hwnd)
-	if _, exists := notifyHandlers[key]; exists {
-		notifyHandlers[key] = nil, false
-	}
-	notifyHandlers[key] = handler
-	C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), C.NotifyProcAddr, C.LPVOID(key))
-}
-
-func DetachNotifyHandler(hwnd uint32) {
-	key := uintptr(hwnd)
-	if handler, exists := notifyHandlers[key]; exists {
-		C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), nil, nil)
-		notifyHandlers[key] = handler, false
-	}
-}
-
 //export goNotifyProc
 func goNotifyProc(msg uint32, wparam uintptr, lparam uintptr, vparam uintptr) uintptr {
 	if handler, exists := notifyHandlers[vparam]; exists {
@@ -721,4 +661,87 @@ func goSelectCallback(he unsafe.Pointer, param uintptr) uintptr {
 	slice := (*[]*Element)(unsafe.Pointer(param))
 	*slice = append(*slice, NewElement(HELEMENT(he)))
 	return 0
+}
+
+//export goElementComparator
+func goElementComparator(he1 unsafe.Pointer, he2 unsafe.Pointer, arg uintptr) int {
+	cmp := *(*func(*Element, *Element) int)(unsafe.Pointer(arg))
+	return cmp(NewElement(HELEMENT(he1)), NewElement(HELEMENT(he2)))
+}
+
+
+
+// Main htmlayout wndproc
+func ProcNoDefault(hwnd, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
+	var handled C.BOOL = 0
+	var result C.LRESULT = C.HTMLayoutProcND(C.HWND(C.HANDLE(uintptr(hwnd))), C.UINT(msg),
+		C.WPARAM(wparam), C.LPARAM(lparam), &handled)
+	return uintptr(result), handled != 0
+}
+
+// Load html contents into window
+func LoadHtml(hwnd uint32, data []byte, baseUrl string) os.Error {
+	if ok := C.HTMLayoutLoadHtmlEx(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.BYTE)(&data[0]),
+		C.UINT(len(data)), (*C.WCHAR)(stringToUtf16Ptr(baseUrl))); ok == 0 {
+		return os.NewError("HTMLayoutLoadHtmlEx failed")
+	}
+	return nil
+}
+
+// Call this from your NotifyHandler.HandleLoadData method if you want htmlayout to
+// process the data right away so you don't have to provide a buffer in the NmhlLoadData structure.
+func DataReady(hwnd uint32, uri *uint16, data *byte, dataLength int32) bool {
+	return C.HTMLayoutDataReady(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.WCHAR)(uri), (*C.BYTE)(data), C.DWORD(dataLength)) != 0
+}
+
+func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
+	key := uintptr(hwnd)
+	if _, exists := eventHandlers[key]; exists {
+		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
+			domPanic(ret, "Failed to detach event handler from window before adding the new one")
+		}
+		eventHandlers[key] = nil, false
+	}
+	eventHandlers[key] = handler
+
+	// Don't let the caller disable ATTACH/DETACH events, otherwise we
+	// won't know when to throw out our event handler object
+	subscription := handler.GetSubscription()
+	subscription &= ^DISABLE_INITIALIZATION
+
+	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key), C.UINT(subscription)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to attach event handler to window")
+	}
+}
+
+func DetachWindowEventHandler(hwnd uint32) {
+	key := uintptr(hwnd)
+	if handler, exists := eventHandlers[key]; exists {
+		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
+			domPanic(ret, "Failed to detach event handler from window")
+		}
+		eventHandlers[key] = handler, false
+	}
+}
+
+func AttachNotifyHandler(hwnd uint32, handler *NotifyHandler) {
+	key := uintptr(hwnd)
+	if _, exists := notifyHandlers[key]; exists {
+		notifyHandlers[key] = nil, false
+	}
+	notifyHandlers[key] = handler
+	C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), C.NotifyProcAddr, C.LPVOID(key))
+}
+
+func DetachNotifyHandler(hwnd uint32) {
+	key := uintptr(hwnd)
+	if handler, exists := notifyHandlers[key]; exists {
+		C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), nil, nil)
+		notifyHandlers[key] = handler, false
+	}
+}
+
+func DumpObjectCounts() {
+	log.Print("Window/element event handlers (", len(eventHandlers), "): ", eventHandlers)
+	log.Print("Window notify handlers (", len(notifyHandlers), "): ", notifyHandlers)
 }
