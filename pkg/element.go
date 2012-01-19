@@ -23,7 +23,7 @@ import (
 	"runtime"
 	"strconv"
 	"unsafe"
-	"utf16"
+	"unicode/utf16"
 )
 
 const (
@@ -64,7 +64,7 @@ func domPanic(result C.HLDOM_RESULT, message... interface{}) {
 // Returns the utf-16 encoding of the utf-8 string s,
 // with a terminating NUL added.
 func stringToUtf16(s string) []uint16 {
-	return utf16.Encode([]int(s + "\x00"))
+	return utf16.Encode([]rune(s + "\x00"))
 }
 
 // Returns the utf-8 encoding of the utf-16 sequence s,
@@ -200,11 +200,11 @@ func (e *Element) AttachHandler(handler *EventHandler) {
 
 func (e *Element) DetachHandler(handler *EventHandler) {
 	tag := uintptr(unsafe.Pointer(handler))
-	if handler, exists := eventHandlers[tag]; exists {
+	if _, exists := eventHandlers[tag]; exists {
 		if ret := C.HTMLayoutDetachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from element")
 		}
-		eventHandlers[tag] = handler, false
+		delete(eventHandlers, tag)
 	} else {
 		panic("cannot detach, handler was not registered")
 	}
@@ -477,10 +477,11 @@ func (e *Element) GetAttr(key string) *string {
 
 func (e *Element) GetAttrAsFloat(key string) *float32 {
 	if s := e.GetAttr(key); s != nil {
-		if f, err := strconv.Atof32(*s); err != nil {
+		if f, err := strconv.ParseFloat(*s, 32); err != nil {
 			panic(err)
 		} else {
-			return &f
+			f32 := float32(f)
+			return &f32
 		}
 	}
 	return nil
@@ -505,7 +506,7 @@ func (e *Element) SetAttr(key string, value interface{}) {
 	case string:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(v)))
 	case float32:
-		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Ftoa32(v, 'e', 6))))
+		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'e', -1, 32))))
 	case int:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Itoa(v))))
 	case nil:
@@ -564,10 +565,11 @@ func (e *Element) GetStyle(key string) *string {
 
 func (e *Element) GetStyleAsFloat(key string) *float32 {
 	if s := e.GetStyle(key); s != nil {
-		if f, err := strconv.Atof32(*s); err != nil {
+		if f, err := strconv.ParseFloat(*s, 32); err != nil {
 			panic(err)
 		} else {
-			return &f
+			f32 := float32(f)
+			return &f32
 		}
 	}
 	return nil
@@ -592,7 +594,7 @@ func (e *Element) SetStyle(key string, value interface{}) {
 	case string:
 		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(v)))
 	case float32:
-		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Ftoa32(v, 'e', 6))))
+		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'e', -1, 32))))
 	case int:
 		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Itoa(v))))
 	case nil:

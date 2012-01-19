@@ -42,8 +42,8 @@ ELEMENT_COMPARATOR *ElementComparatorAddr = (ELEMENT_COMPARATOR *)&ElementCompar
 import "C"
 
 import (
-	"os"
 	"log"
+	"errors"
 	"unsafe"
 )
 
@@ -541,7 +541,7 @@ func goElementProc(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Po
 			if handler.OnDetached != nil {
 				handler.OnDetached(HELEMENT(he))
 			}
-			eventHandlers[key] = handler, false
+			delete(eventHandlers, key)
 		}
 		handled = true
 	case C.HANDLE_MOUSE:
@@ -680,18 +680,18 @@ func ProcNoDefault(hwnd, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
 }
 
 // Load html contents into window
-func LoadHtml(hwnd uint32, data []byte, baseUrl string) os.Error {
+func LoadHtml(hwnd uint32, data []byte, baseUrl string) error {
 	if ok := C.HTMLayoutLoadHtmlEx(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.BYTE)(&data[0]),
 		C.UINT(len(data)), (*C.WCHAR)(stringToUtf16Ptr(baseUrl))); ok == 0 {
-		return os.NewError("HTMLayoutLoadHtmlEx failed")
+		return errors.New("HTMLayoutLoadHtmlEx failed")
 	}
 	return nil
 }
 
 // Call this from your NotifyHandler.HandleLoadData method if you want htmlayout to
 // process the data right away so you don't have to provide a buffer in the NmhlLoadData structure.
-func DataReady(hwnd uint32, uri *uint16, data *byte, dataLength int32) bool {
-	return C.HTMLayoutDataReady(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.WCHAR)(uri), (*C.BYTE)(data), C.DWORD(dataLength)) != 0
+func DataReady(hwnd uint32, uri *uint16, data []byte) bool {
+	return C.HTMLayoutDataReady(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.WCHAR)(uri), (*C.BYTE)(&data[0]), C.DWORD(len(data))) != 0
 }
 
 func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
@@ -700,8 +700,9 @@ func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from window before adding the new one")
 		}
-		eventHandlers[key] = nil, false
 	}
+
+	// Overwrite if it exists
 	eventHandlers[key] = handler
 
 	// Don't let the caller disable ATTACH/DETACH events, otherwise we
@@ -716,28 +717,26 @@ func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 
 func DetachWindowEventHandler(hwnd uint32) {
 	key := uintptr(hwnd)
-	if handler, exists := eventHandlers[key]; exists {
+	if _, exists := eventHandlers[key]; exists {
 		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from window")
 		}
-		eventHandlers[key] = handler, false
+		delete(eventHandlers, key)
 	}
 }
 
 func AttachNotifyHandler(hwnd uint32, handler *NotifyHandler) {
 	key := uintptr(hwnd)
-	if _, exists := notifyHandlers[key]; exists {
-		notifyHandlers[key] = nil, false
-	}
+	// Overwrite if it exists
 	notifyHandlers[key] = handler
 	C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), C.NotifyProcAddr, C.LPVOID(key))
 }
 
 func DetachNotifyHandler(hwnd uint32) {
 	key := uintptr(hwnd)
-	if handler, exists := notifyHandlers[key]; exists {
+	if _, exists := notifyHandlers[key]; exists {
 		C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), nil, nil)
-		notifyHandlers[key] = handler, false
+		delete(notifyHandlers, key)
 	}
 }
 
