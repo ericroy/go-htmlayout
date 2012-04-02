@@ -1,7 +1,7 @@
 package gohl
 /*
-#cgo CFLAGS: -I../htmlayout/include
-#cgo LDFLAGS: ../htmlayout/lib/HTMLayout.lib
+#cgo CFLAGS: -I../../htmlayout/include
+#cgo LDFLAGS: ../../htmlayout/lib/HTMLayout.lib
 
 #include <stdlib.h>
 #include <htmlayout.h>
