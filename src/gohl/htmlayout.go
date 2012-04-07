@@ -6,37 +6,10 @@ package gohl
 #include <stdlib.h>
 #include <htmlayout.h>
 
-// Main event function that dispatches to the appropriate event handler
-BOOL CALLBACK ElementProc(LPVOID tag, HELEMENT he, UINT evtg, LPVOID prms)
-{
-	extern BOOL goElementProc(LPVOID, HELEMENT, UINT, LPVOID);
-	return goElementProc(tag, he, evtg, prms);
-}
-LPELEMENT_EVENT_PROC ElementProcAddr = &ElementProc;
-
-// Main event function that dispatches notify messages
-LRESULT CALLBACK NotifyProc(UINT uMsg, WPARAM wParam, LPARAM lParam, LPVOID vParam)
-{
-	extern BOOL goNotifyProc(UINT, WPARAM, LPARAM, LPVOID);
-	return goNotifyProc(uMsg, wParam, lParam, vParam);
-}
-LPHTMLAYOUT_NOTIFY NotifyProcAddr = &NotifyProc;
-
-// Callback for results found during a select operation
-BOOL CALLBACK SelectCallback(HELEMENT he, LPVOID param)
-{
-	extern BOOL goSelectCallback(HELEMENT, LPVOID);
-	return goSelectCallback(he, param);
-}
-HTMLayoutElementCallback *SelectCallbackAddr = &SelectCallback;
-
-
-INT ElementComparator(HELEMENT he1, HELEMENT he2, LPVOID pArg)
-{
-	extern INT goElementComparator(HELEMENT, HELEMENT, LPVOID);
-	return goElementComparator(he1, he2, pArg);
-}
-ELEMENT_COMPARATOR *ElementComparatorAddr = (ELEMENT_COMPARATOR *)&ElementComparator;
+//BOOL CALLBACK goElementProc(LPVOID tag, HELEMENT he, UINT evtg, LPVOID prms);
+//LRESULT CALLBACK goNotifyProc(UINT uMsg, WPARAM wParam, LPARAM lParam, LPVOID vParam);
+//BOOL CALLBACK goSelectCallback(HELEMENT he, LPVOID param);
+//INT goElementComparator(HELEMENT he1, HELEMENT he2, LPVOID pArg);
 
 */
 import "C"
@@ -604,7 +577,7 @@ func goElementProc(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Po
 			handled = handler.OnGesture(HELEMENT(he), p)
 		}
 	default:
-		log.Panic("unhandled htmlayout event case: ", evtg)
+		log.Panic("Unhandled htmlayout event case: ", evtg)
 	}
 
 	if handled {
@@ -697,7 +670,7 @@ func DataReady(hwnd uint32, uri *uint16, data []byte) bool {
 func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 	key := uintptr(hwnd)
 	if _, exists := eventHandlers[key]; exists {
-		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), &C.goElementProc, C.LPVOID(key)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from window before adding the new one")
 		}
 	}
@@ -710,7 +683,7 @@ func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 	subscription := handler.GetSubscription()
 	subscription &= ^DISABLE_INITIALIZATION
 
-	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key), C.UINT(subscription)); ret != HLDOM_OK {
+	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), goElementProc, C.LPVOID(key), C.UINT(subscription)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to attach event handler to window")
 	}
 }
@@ -718,7 +691,7 @@ func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 func DetachWindowEventHandler(hwnd uint32) {
 	key := uintptr(hwnd)
 	if _, exists := eventHandlers[key]; exists {
-		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), goElementProc, C.LPVOID(key)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from window")
 		}
 		delete(eventHandlers, key)
@@ -729,7 +702,7 @@ func AttachNotifyHandler(hwnd uint32, handler *NotifyHandler) {
 	key := uintptr(hwnd)
 	// Overwrite if it exists
 	notifyHandlers[key] = handler
-	C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), C.NotifyProcAddr, C.LPVOID(key))
+	C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), goNotifyProc, C.LPVOID(key))
 }
 
 func DetachNotifyHandler(hwnd uint32) {
