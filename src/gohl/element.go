@@ -6,14 +6,10 @@ package gohl
 #include <stdlib.h>
 #include <htmlayout.h>
 
-//extern BOOL CALLBACK ElementProc(LPVOID tag, HELEMENT he, UINT evtg, LPVOID prms );
-//extern LPELEMENT_EVENT_PROC ElementProcAddr;
-
-//extern BOOL CALLBACK SelectElementCallback(HELEMENT he, LPVOID param);
-//extern HTMLayoutElementCallback *SelectCallbackAddr;
-
-//extern INT ElementComparator(HELEMENT he1, HELEMENT he2, LPVOID pArg);
-//extern ELEMENT_COMPARATOR *ElementComparatorAddr;
+extern LPELEMENT_EVENT_PROC ElementProcAddr;
+extern LPHTMLAYOUT_NOTIFY NotifyProcAddr;
+extern HTMLayoutElementCallback *SelectCallbackAddr;
+extern ELEMENT_COMPARATOR *ElementComparatorAddr;
 */
 import "C"
 
@@ -176,7 +172,7 @@ func (e *Element) Equals(other *Element) bool {
 func (e *Element) AttachHandler(handler *EventHandler) {
 	tag := uintptr(unsafe.Pointer(handler))
 	if _, exists := eventHandlers[tag]; exists {
-		if ret := C.HTMLayoutDetachEventHandler(e.handle, goElementProc, C.LPVOID(tag)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutDetachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from element before attaching it again")
 		}
 	}
@@ -188,11 +184,11 @@ func (e *Element) AttachHandler(handler *EventHandler) {
 	subscription &= ^DISABLE_INITIALIZATION
 	
 	if subscription  == HANDLE_ALL {
-		if ret := C.HTMLayoutAttachEventHandler(e.handle, goElementProc, C.LPVOID(tag)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutAttachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to attach event handler to element")
 		}
 	} else {
-		if ret := C.HTMLayoutAttachEventHandlerEx(e.handle, goElementProc, C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutAttachEventHandlerEx(e.handle, C.ElementProcAddr, C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to attach event handler to element")
 		}
 	}
@@ -201,7 +197,7 @@ func (e *Element) AttachHandler(handler *EventHandler) {
 func (e *Element) DetachHandler(handler *EventHandler) {
 	tag := uintptr(unsafe.Pointer(handler))
 	if _, exists := eventHandlers[tag]; exists {
-		if ret := C.HTMLayoutDetachEventHandler(e.handle, goElementProc, C.LPVOID(tag)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutDetachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from element")
 		}
 		delete(eventHandlers, tag)
@@ -238,7 +234,7 @@ func (e *Element) Select(selector string) []*Element {
 	szSelector := C.CString(selector)
 	defer C.free(unsafe.Pointer(szSelector))
 	results := make([]*Element, 0, 32)
-	if ret := C.HTMLayoutSelectElements(e.handle, (*C.CHAR)(szSelector), goSelectCallback, C.LPVOID(unsafe.Pointer(&results))); ret != HLDOM_OK {
+	if ret := C.HTMLayoutSelectElements(e.handle, (*C.CHAR)(szSelector), C.SelectCallbackAddr, C.LPVOID(unsafe.Pointer(&results))); ret != HLDOM_OK {
 		domPanic(ret, "Failed to select dom elements, selector: '", selector, "'")
 	}
 	return results
@@ -368,7 +364,7 @@ func (e *Element) Swap(other *Element) {
 func (e *Element) SortChildrenRange(start, count uint, comparator func(*Element, *Element) int) {
 	end := start + count
 	arg := uintptr(unsafe.Pointer(&comparator))
-	if ret := C.HTMLayoutSortElements(e.handle, C.UINT(start), C.UINT(end), goElementComparator, C.LPVOID(arg)); ret != HLDOM_OK {
+	if ret := C.HTMLayoutSortElements(e.handle, C.UINT(start), C.UINT(end), C.ElementComparatorAddr, C.LPVOID(arg)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to sort elements")
 	}
 }

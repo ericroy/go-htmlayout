@@ -6,11 +6,10 @@ package gohl
 #include <stdlib.h>
 #include <htmlayout.h>
 
-//BOOL CALLBACK goElementProc(LPVOID tag, HELEMENT he, UINT evtg, LPVOID prms);
-//LRESULT CALLBACK goNotifyProc(UINT uMsg, WPARAM wParam, LPARAM lParam, LPVOID vParam);
-//BOOL CALLBACK goSelectCallback(HELEMENT he, LPVOID param);
-//INT goElementComparator(HELEMENT he1, HELEMENT he2, LPVOID pArg);
-
+extern LPELEMENT_EVENT_PROC ElementProcAddr;
+extern LPHTMLAYOUT_NOTIFY NotifyProcAddr;
+extern HTMLayoutElementCallback *SelectCallbackAddr;
+extern ELEMENT_COMPARATOR *ElementComparatorAddr;
 */
 import "C"
 
@@ -670,7 +669,7 @@ func DataReady(hwnd uint32, uri *uint16, data []byte) bool {
 func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 	key := uintptr(hwnd)
 	if _, exists := eventHandlers[key]; exists {
-		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), &C.goElementProc, C.LPVOID(key)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from window before adding the new one")
 		}
 	}
@@ -683,7 +682,7 @@ func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 	subscription := handler.GetSubscription()
 	subscription &= ^DISABLE_INITIALIZATION
 
-	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), goElementProc, C.LPVOID(key), C.UINT(subscription)); ret != HLDOM_OK {
+	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key), C.UINT(subscription)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to attach event handler to window")
 	}
 }
@@ -691,7 +690,7 @@ func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 func DetachWindowEventHandler(hwnd uint32) {
 	key := uintptr(hwnd)
 	if _, exists := eventHandlers[key]; exists {
-		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), goElementProc, C.LPVOID(key)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from window")
 		}
 		delete(eventHandlers, key)
@@ -702,7 +701,7 @@ func AttachNotifyHandler(hwnd uint32, handler *NotifyHandler) {
 	key := uintptr(hwnd)
 	// Overwrite if it exists
 	notifyHandlers[key] = handler
-	C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), goNotifyProc, C.LPVOID(key))
+	C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), C.NotifyProcAddr, C.LPVOID(key))
 }
 
 func DetachNotifyHandler(hwnd uint32) {
