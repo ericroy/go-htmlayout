@@ -17,7 +17,7 @@ type EventHandler struct {
 	OnGesture func(he HELEMENT, params *GestureParams) bool
 }
 
-func (e *EventHandler) GetSubscription() uint32 {
+func (e *EventHandler) Subscription() uint32 {
 	var subscription uint32 = 0
 	add := func (f interface{}, flag uint32) {
 		if f != nil {

@@ -120,7 +120,7 @@ func NewElement(h HELEMENT) *Element {
 	return e
 }
 
-func GetRootElement(hwnd uint32) *Element {
+func RootElement(hwnd uint32) *Element {
 	var handle HELEMENT = nil
 	if ret := C.HTMLayoutGetRootElement(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.HELEMENT)(&handle)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get root element")
@@ -128,7 +128,7 @@ func GetRootElement(hwnd uint32) *Element {
 	return NewElement(handle)
 }
 
-func GetFocusElement(hwnd uint32) *Element {
+func FocusedElement(hwnd uint32) *Element {
 	var handle HELEMENT = nil
 	if ret := C.HTMLayoutGetFocusElement(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.HELEMENT)(&handle)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get focus element")
@@ -161,7 +161,7 @@ func (e *Element) setHandle(h HELEMENT) {
 	e.handle = h
 }
 
-func (e *Element) GetHandle() HELEMENT {
+func (e *Element) Handle() HELEMENT {
 	return e.handle
 }
 
@@ -180,7 +180,7 @@ func (e *Element) AttachHandler(handler *EventHandler) {
 
 	// Don't let the caller disable ATTACH/DETACH events, otherwise we
 	// won't know when to throw out our event handler object
-	subscription := handler.GetSubscription()
+	subscription := handler.Subscription()
 	subscription &= ^DISABLE_INITIALIZATION
 	
 	if subscription  == HANDLE_ALL {
@@ -216,7 +216,7 @@ func (e *Element) Update(render bool) {
 	}
 }
 
-func (e *Element) SetCapture() {
+func (e *Element) Capture() {
 	if ret := C.HTMLayoutSetCapture(e.handle); ret != HLDOM_OK {
 		domPanic(ret, "Failed to set capture for element")
 	}
@@ -275,7 +275,7 @@ func (e *Element) SendEvent(destination *Element, eventCode uint, source *Elemen
 
 // DOM structure accessors/modifiers:
 
-func (e *Element) GetChildCount() uint {
+func (e *Element) ChildCount() uint {
 	var count C.UINT
 	if ret := C.HTMLayoutGetChildrenCount(e.handle, &count); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get child count")
@@ -283,7 +283,7 @@ func (e *Element) GetChildCount() uint {
 	return uint(count)
 }
 
-func (e *Element) GetChild(index uint) *Element {
+func (e *Element) Child(index uint) *Element {
 	var child C.HELEMENT
 	if ret := C.HTMLayoutGetNthChild(e.handle, C.UINT(index), &child); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get child at index: ", index)
@@ -291,15 +291,15 @@ func (e *Element) GetChild(index uint) *Element {
 	return NewElement(HELEMENT(child))
 }
 
-func (e *Element) GetChildren() []*Element {
+func (e *Element) Children() []*Element {
 	slice := make([]*Element, 0, 32)
-	for i := uint(0); i < e.GetChildCount(); i++ {
-		slice = append(slice, e.GetChild(i))
+	for i := uint(0); i < e.ChildCount(); i++ {
+		slice = append(slice, e.Child(i))
 	}
 	return slice
 }
 
-func (e *Element) GetIndex() uint {
+func (e *Element) Index() uint {
 	var index C.UINT
 	if ret := C.HTMLayoutGetElementIndex(e.handle, &index); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get element's index")
@@ -307,7 +307,7 @@ func (e *Element) GetIndex() uint {
 	return uint(index)
 }
 
-func (e *Element) GetParent() *Element {
+func (e *Element) Parent() *Element {
 	var parent C.HELEMENT
 	if ret := C.HTMLayoutGetParentElement(e.handle, &parent); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get parent")
@@ -325,7 +325,7 @@ func (e *Element) InsertChild(child *Element, index uint) {
 }
 
 func (e *Element) AppendChild(child *Element) {
-	count := e.GetChildCount()
+	count := e.ChildCount()
 	if ret := C.HTMLayoutInsertElement(e.handle, child.handle, C.UINT(count)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to append child element")
 	}
@@ -370,7 +370,7 @@ func (e *Element) SortChildrenRange(start, count uint, comparator func(*Element,
 }
 
 func (e *Element) SortChildren(comparator func(*Element, *Element) int) {
-	e.SortChildrenRange(0, e.GetChildCount(), comparator)
+	e.SortChildrenRange(0, e.ChildCount(), comparator)
 }
 
 func (e *Element) SetTimer(ms int) {
@@ -383,7 +383,7 @@ func (e *Element) CancelTimer() {
 	e.SetTimer(0)
 }
 
-func (e *Element) GetHwnd() uint32 {
+func (e *Element) Hwnd() uint32 {
 	var hwnd uint32
 	if ret := C.HTMLayoutGetElementHwnd(e.handle, (*C.HWND)(unsafe.Pointer(&hwnd)), 0); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get element's hwnd")
@@ -391,7 +391,7 @@ func (e *Element) GetHwnd() uint32 {
 	return hwnd
 }
 
-func (e *Element) GetRootHwnd() uint32 {
+func (e *Element) RootHwnd() uint32 {
 	var hwnd uint32
 	if ret := C.HTMLayoutGetElementHwnd(e.handle, (*C.HWND)(unsafe.Pointer(&hwnd)), 1); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get element's root hwnd")
@@ -399,7 +399,7 @@ func (e *Element) GetRootHwnd() uint32 {
 	return hwnd
 }
 
-func (e *Element) GetHtml() string {
+func (e *Element) Html() string {
 	var data *C.char
 	if ret := C.HTMLayoutGetElementHtml(e.handle, (*C.LPBYTE)(unsafe.Pointer(data)), C.BOOL(0)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get inner html")
@@ -407,7 +407,7 @@ func (e *Element) GetHtml() string {
 	return C.GoString(data)
 }
 
-func (e *Element) GetOuterHtml() string {
+func (e *Element) OuterHtml() string {
 	var data *C.char
 	if ret := C.HTMLayoutGetElementHtml(e.handle, (*C.LPBYTE)(unsafe.Pointer(data)), C.BOOL(1)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get inner html")
@@ -415,7 +415,7 @@ func (e *Element) GetOuterHtml() string {
 	return C.GoString(data)
 }
 
-func (e *Element) GetType() string {
+func (e *Element) Type() string {
 	var data *C.char
 	if ret := C.HTMLayoutGetElementType(e.handle, (*C.LPCSTR)(unsafe.Pointer(data))); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get element type")
@@ -457,7 +457,7 @@ func (e *Element) SetText(text string) {
 
 // HTML attribute accessors/modifiers:
 
-func (e *Element) GetAttr(key string) *string {
+func (e *Element) Attr(key string) *string {
 	szValue := (*C.WCHAR)(nil)
 	szKey := C.CString(key)
 	defer C.free(unsafe.Pointer(szKey))
@@ -471,8 +471,8 @@ func (e *Element) GetAttr(key string) *string {
 	return nil
 }
 
-func (e *Element) GetAttrAsFloat(key string) *float32 {
-	if s := e.GetAttr(key); s != nil {
+func (e *Element) AttrAsFloat(key string) *float32 {
+	if s := e.Attr(key); s != nil {
 		if f, err := strconv.ParseFloat(*s, 32); err != nil {
 			panic(err)
 		} else {
@@ -483,8 +483,8 @@ func (e *Element) GetAttrAsFloat(key string) *float32 {
 	return nil
 }
 
-func (e *Element) GetAttrAsInt(key string) *int {
-	if s := e.GetAttr(key); s != nil {
+func (e *Element) AttrAsInt(key string) *int {
+	if s := e.Attr(key); s != nil {
 		if i, err := strconv.Atoi(*s); err != nil {
 			panic(err)
 		} else {
@@ -519,7 +519,7 @@ func (e *Element) RemoveAttr(key string) {
 	e.SetAttr(key, nil)
 }
 
-func (e *Element) GetAttrValueByIndex(index uint) string {
+func (e *Element) AttrValueByIndex(index uint) string {
 	szValue := (*C.WCHAR)(nil)
 	if ret := C.HTMLayoutGetNthAttribute(e.handle, C.UINT(index), nil, (*C.LPCWSTR)(&szValue)); ret != HLDOM_OK {
 		domPanic(ret, fmt.Sprintf("Failed to get attribute name by index: %u", index))
@@ -527,7 +527,7 @@ func (e *Element) GetAttrValueByIndex(index uint) string {
 	return utf16ToString((*uint16)(szValue))
 }
 
-func (e *Element) GetAttrNameByIndex(index uint) string {
+func (e *Element) AttrNameByIndex(index uint) string {
 	szName := (*C.CHAR)(nil)
 	if ret := C.HTMLayoutGetNthAttribute(e.handle, C.UINT(index), (*C.LPCSTR)(&szName), nil); ret != HLDOM_OK {
 		domPanic(ret, fmt.Sprintf("Failed to get attribute name by index: %u", index))
@@ -535,7 +535,7 @@ func (e *Element) GetAttrNameByIndex(index uint) string {
 	return C.GoString((*C.char)(szName))
 }
 
-func (e *Element) GetAttrCount(index uint) uint {
+func (e *Element) AttrCount(index uint) uint {
 	var count C.UINT = 0
 	if ret := C.HTMLayoutGetAttributeCount(e.handle, &count); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get attribute count")
@@ -545,7 +545,7 @@ func (e *Element) GetAttrCount(index uint) uint {
 
 // CSS style attribute accessors/mutators
 
-func (e *Element) GetStyle(key string) *string {
+func (e *Element) Style(key string) *string {
 	szValue := (*C.WCHAR)(nil)
 	szKey := C.CString(key)
 	defer C.free(unsafe.Pointer(szKey))
@@ -559,8 +559,8 @@ func (e *Element) GetStyle(key string) *string {
 	return nil
 }
 
-func (e *Element) GetStyleAsFloat(key string) *float32 {
-	if s := e.GetStyle(key); s != nil {
+func (e *Element) StyleAsFloat(key string) *float32 {
+	if s := e.Style(key); s != nil {
 		if f, err := strconv.ParseFloat(*s, 32); err != nil {
 			panic(err)
 		} else {
@@ -571,8 +571,8 @@ func (e *Element) GetStyleAsFloat(key string) *float32 {
 	return nil
 }
 
-func (e *Element) GetStyleAsInt(key string) *int {
-	if s := e.GetStyle(key); s != nil {
+func (e *Element) StyleAsInt(key string) *int {
+	if s := e.Style(key); s != nil {
 		if i, err := strconv.Atoi(*s); err != nil {
 			panic(err)
 		} else {

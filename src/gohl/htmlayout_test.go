@@ -145,41 +145,13 @@ func PostMessage(hwnd uint32, msg uint32, wparam uintptr, lparam uintptr) (err s
 	return
 }
 
-/*
-// Returns the utf-16 encoding of the utf-8 string s,
-// with a terminating NUL added.
-func stringToUtf16(s string) []uint16 {
-	return utf16.Encode([]rune(s + "\x00"))
-}
-
-// Returns pointer to the utf-16 encoding of
-// the utf-8 string s, with a terminating NUL added.
-func stringToUtf16Ptr(s string) *uint16 {
-	return &stringToUtf16(s)[0]
-}
-*/
 
 // Notify handler deals with WM_NOTIFY messages sent by htmlayout
-var notifyHandler = &NotifyHandler{
-	/*
-	OnLoadData: func(params *gohl.NmhlLoadData) uintptr {
-		var bytes []byte
-		var err error
-		relativePath := wapiutil.Utf16ToString(params.Uri)
-		log.Print("Loading resource: ", relativePath)
-		if bytes, err = ioutil.ReadFile(path.Join(ASSETS_ROOT, relativePath)); err != nil {
-			log.Panic(err)
-		}
-		if !gohl.DataReady(params.Header.HwndFrom, params.Uri, bytes) {
-			log.Panic("Failed to load resource: ", relativePath)
-		}
-		return 0
-	},
-	*/
-}
+var notifyHandler = &NotifyHandler{}
 
 // Window event handler gets first and last chance to process events
 var windowEventHandler = &EventHandler{}
+
 
 func makeWndProc(html string, onCreate func(), onDestroy func()) func(uint32, uint32, uintptr, uintptr) uintptr {
 	return func(hwnd, msg uint32, wparam uintptr, lparam uintptr) uintptr {
