@@ -2,6 +2,7 @@
 _obj/
 htmlayout/
 HTMLayoutSDK.zip
+htmlayout.dll
 *.pyc
 *.o
 _cgo_export.h
