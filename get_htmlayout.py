@@ -7,6 +7,8 @@ import patch_htmlayout_header
 URL = "http://www.terrainformatica.com/htmlayout/HTMLayoutSDK.zip"
 PATH = "./HTMLayoutSDK.zip"
 TARGET = "./htmlayout"
+DLL = os.path.join(TARGET, "bin", "htmlayout.dll")
+DLL_TEST_DEST = os.path.join("src", "gohl", os.path.basename(DLL))
 
 """
 Borrowed this unzipper from:
@@ -69,22 +71,24 @@ class Unzipper:
 
 
 def main():
-	if os.path.exists(PATH):
-		os.remove(PATH)
-	if os.path.exists(TARGET):
-		shutil.rmtree(TARGET)
-	print("Downloading sdk...")
-	with open(PATH, "wb") as dest:
-		source = urllib2.urlopen(URL)
-		dest.write(source.read())
-		source.close()
-	print("Download complete, extracting...")
-	os.mkdir(TARGET)
-	z = Unzipper()
-	z.extract(PATH, TARGET)
-	print("Extraction complete, patching...")
-	patch_htmlayout_header.main()
-	print("Finished.")
+    if os.path.exists(PATH):
+        os.remove(PATH)
+    if os.path.exists(TARGET):
+        shutil.rmtree(TARGET)
+    print("Downloading sdk...")
+    with open(PATH, "wb") as dest:
+        source = urllib2.urlopen(URL)
+        dest.write(source.read())
+        source.close()
+    print("Download complete, extracting...")
+    os.mkdir(TARGET)
+    z = Unzipper()
+    z.extract(PATH, TARGET)
+    print("Extraction complete, patching...")
+    patch_htmlayout_header.main()
+    print("Copying htmlayout.dll into src folder so that tests can run...")
+    shutil.copyfile(DLL, DLL_TEST_DEST)
+    print("Finished.")
 
 if __name__ == "__main__":
-	main()
+    main()
