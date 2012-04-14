@@ -1,4 +1,5 @@
 package gohl
+
 /*
 #cgo CFLAGS: -I../../htmlayout/include
 #cgo LDFLAGS: ../../htmlayout/lib/HTMLayout.lib
@@ -14,8 +15,8 @@ extern ELEMENT_COMPARATOR *ElementComparatorAddr;
 import "C"
 
 import (
-	"log"
 	"errors"
+	"log"
 	"unsafe"
 )
 
@@ -297,25 +298,21 @@ const (
 	XCALL                        = C.XCALL                        // p - XCALL_PARAMS
 	FIRST_APPLICATION_METHOD_ID  = C.FIRST_APPLICATION_METHOD_ID
 
-
 	// Content insertion locations
-	SIH_REPLACE_CONTENT = C.SIH_REPLACE_CONTENT
-	SIH_INSERT_AT_START = C.SIH_INSERT_AT_START
+	SIH_REPLACE_CONTENT   = C.SIH_REPLACE_CONTENT
+	SIH_INSERT_AT_START   = C.SIH_INSERT_AT_START
 	SIH_APPEND_AFTER_LAST = C.SIH_APPEND_AFTER_LAST
-	SOH_REPLACE = C.SOH_REPLACE
-	SOH_INSERT_BEFORE = C.SOH_INSERT_BEFORE
-	SOH_INSERT_AFTER = C.SOH_INSERT_AFTER
-
+	SOH_REPLACE           = C.SOH_REPLACE
+	SOH_INSERT_BEFORE     = C.SOH_INSERT_BEFORE
+	SOH_INSERT_AFTER      = C.SOH_INSERT_AFTER
 )
 
 var (
 	// Hold a reference to handlers that are in-use so that they don't
 	// get garbage collected.
 	notifyHandlers = make(map[uintptr]*NotifyHandler, 8)
-	eventHandlers = make(map[uintptr]*EventHandler, 128)
+	eventHandlers  = make(map[uintptr]*EventHandler, 128)
 )
-
-
 
 type HELEMENT C.HELEMENT
 
@@ -439,11 +436,10 @@ type GestureParams struct {
 // Notify structures
 
 type NMHDR struct {
-	HwndFrom		uint32
-	IdFrom			uintptr
-	Code 			uint32
+	HwndFrom uint32
+	IdFrom   uintptr
+	Code     uint32
 }
-
 
 type NmhlCreateControl struct {
 	Header         NMHDR
@@ -488,7 +484,6 @@ type NmhlAttachBehavior struct {
 	ElementTag    uintptr
 	ElementEvents uint32
 }
-
 
 // Main event handler that dispatches to the right element handler
 //export goElementProc 
@@ -641,8 +636,6 @@ func goElementComparator(he1 unsafe.Pointer, he2 unsafe.Pointer, arg uintptr) in
 	return cmp(NewElement(HELEMENT(he1)), NewElement(HELEMENT(he2)))
 }
 
-
-
 // Main htmlayout wndproc
 func ProcNoDefault(hwnd, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
 	var handled C.BOOL = 0
@@ -653,9 +646,11 @@ func ProcNoDefault(hwnd, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
 
 // Load html contents into window
 func LoadHtml(hwnd uint32, data []byte, baseUrl string) error {
-	if ok := C.HTMLayoutLoadHtmlEx(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.BYTE)(&data[0]),
-		C.UINT(len(data)), (*C.WCHAR)(stringToUtf16Ptr(baseUrl))); ok == 0 {
-		return errors.New("HTMLayoutLoadHtmlEx failed")
+	if len(data) > 0 {
+		if ok := C.HTMLayoutLoadHtmlEx(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.BYTE)(&data[0]),
+			C.UINT(len(data)), (*C.WCHAR)(stringToUtf16Ptr(baseUrl))); ok == 0 {
+			return errors.New("HTMLayoutLoadHtmlEx failed")
+		}
 	}
 	return nil
 }

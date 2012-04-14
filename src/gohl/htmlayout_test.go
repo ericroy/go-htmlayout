@@ -1,32 +1,37 @@
 package gohl
 
 import (
-	"testing"
 	"log"
 	"syscall"
+	"testing"
 	"unsafe"
 )
 
 const (
-	WM_CREATE      = 1
-	WM_DESTROY     = 2
-	WM_CLOSE       = 16
+	WM_CREATE     = 1
+	WM_DESTROY    = 2
+	WM_CLOSE      = 16
+	WM_QUIT       = 0x0012
+	WM_ERASEBKGND = 0x0014
+	WM_SHOWWINDOW = 0x0018
 	ERROR_SUCCESS = 0
 )
 
 var (
-	moduser32   = syscall.NewLazyDLL("user32.dll")
+	moduser32 = syscall.NewLazyDLL("user32.dll")
 
-	procRegisterClassExW        = moduser32.NewProc("RegisterClassExW")
-	procCreateWindowExW         = moduser32.NewProc("CreateWindowExW")
-	procDefWindowProcW          = moduser32.NewProc("DefWindowProcW")
-	procDestroyWindow           = moduser32.NewProc("DestroyWindow")
-	procPostQuitMessage         = moduser32.NewProc("PostQuitMessage")
-	procGetMessageW             = moduser32.NewProc("GetMessageW")
-	procTranslateMessage        = moduser32.NewProc("TranslateMessage")
-	procDispatchMessageW        = moduser32.NewProc("DispatchMessageW")
-	procSendMessageW            = moduser32.NewProc("SendMessageW")
-	procPostMessageW            = moduser32.NewProc("PostMessageW")
+	procRegisterClassExW = moduser32.NewProc("RegisterClassExW")
+	procCreateWindowExW  = moduser32.NewProc("CreateWindowExW")
+	procDefWindowProcW   = moduser32.NewProc("DefWindowProcW")
+	procDestroyWindow    = moduser32.NewProc("DestroyWindow")
+	procPostQuitMessage  = moduser32.NewProc("PostQuitMessage")
+	procGetMessageW      = moduser32.NewProc("GetMessageW")
+	procTranslateMessage = moduser32.NewProc("TranslateMessage")
+	procDispatchMessageW = moduser32.NewProc("DispatchMessageW")
+	procSendMessageW     = moduser32.NewProc("SendMessageW")
+	procPostMessageW     = moduser32.NewProc("PostMessageW")
+
+	classRegistered = false
 )
 
 type Wndclassex struct {
@@ -146,73 +151,68 @@ func PostMessage(hwnd uint32, msg uint32, wparam uintptr, lparam uintptr) (err s
 }
 
 
-// Notify handler deals with WM_NOTIFY messages sent by htmlayout
-var notifyHandler = &NotifyHandler{}
+// Utility functions for creating a testing window, etc
 
-// Window event handler gets first and last chance to process events
-var windowEventHandler = &EventHandler{}
+func extendHandlerMap(original, extras MsgHandlerMap) MsgHandlerMap {
+	m := make(MsgHandlerMap, 32)
+	for k, v := range original {
+		m[k] = v
+	}
+	for k, v := range extras {
+		m[k] = v
+	}
+	return m
+}
 
+func makeWindow(callbacks MsgHandlerMap) {
 
-func makeWndProc(html string, onCreate func(), onDestroy func()) func(uint32, uint32, uintptr, uintptr) uintptr {
-	return func(hwnd, msg uint32, wparam uintptr, lparam uintptr) uintptr {
+	wproc := syscall.NewCallback(func(hwnd, msg uint32, wparam uintptr, lparam uintptr) uintptr {
 		if result, handled := ProcNoDefault(hwnd, msg, wparam, lparam); handled {
 			return result
 		}
 
-		var rc int32
-		
-		switch msg {
-		case WM_CREATE:
-			log.Print("WM_CREATE")
-			AttachNotifyHandler(hwnd, notifyHandler)
-			AttachWindowEventHandler(hwnd, windowEventHandler)
-			if err := LoadHtml(hwnd, []byte(html), ""); err != nil {
-				log.Panic(err)
-			}
-			onCreate()
-			rc = 0
-		case WM_CLOSE:
-			log.Print("WM_CLOSE")
-			DetachWindowEventHandler(hwnd)
-			DetachNotifyHandler(hwnd)
-			DestroyWindow(hwnd)
-		case WM_DESTROY:
-			log.Print("WM_DESTROY")
-			DumpObjectCounts()		
-			PostQuitMessage(0)
-			onDestroy()
-		default:
-			rc = DefWindowProc(hwnd, msg, wparam, lparam)
+		var rc interface{} = nil
+		if cb := callbacks[msg]; cb != nil {
+			rc = cb(hwnd)
 		}
 
-		return uintptr(rc)
-	}
-}
+		// Handler provided a return code
+		if rc != nil {
+			if code, ok := rc.(int); !ok {
+				panic("window msg response should be int")
+			} else {
+				return uintptr(code)
+			}
+		}
 
-
-
-func makeWindow(html string, onCreate func(), onDestroy func()) uint32 {
-
-	wproc := syscall.NewCallback(makeWndProc(html, onCreate, onDestroy))
+		// Handler did not provide a return code, use the default window procedure
+		code := DefWindowProc(hwnd, msg, wparam, lparam)
+		return uintptr(code)
+	})
 
 	// RegisterClassEx
-	wcname := stringToUtf16Ptr("gohlWindowClass")
-	var wc Wndclassex
-	wc.Size = uint32(unsafe.Sizeof(wc))
-	wc.WndProc = wproc
-	wc.Instance = 0
-	wc.Icon = 0
-	wc.Cursor = 0
-	wc.Background = 0
-	wc.MenuName = nil
-	wc.ClassName = wcname
-	wc.IconSm = 0
+	wcname := stringToUtf16Ptr("gohlTesting")
 
-	if _, errno := RegisterClassEx(&wc); errno != ERROR_SUCCESS {
-		panic(errno)
+	if !classRegistered {
+		var wc Wndclassex
+		wc.Size = uint32(unsafe.Sizeof(wc))
+		wc.WndProc = wproc
+		wc.Instance = 0
+		wc.Icon = 0
+		wc.Cursor = 0
+		wc.Background = 0
+		wc.MenuName = nil
+		wc.ClassName = wcname
+		wc.IconSm = 0
+
+		if _, errno := RegisterClassEx(&wc); errno != ERROR_SUCCESS {
+			log.Panic(errno)
+		}
+
+		classRegistered = true
 	}
 
-	hwnd, errno := CreateWindowEx(
+	_, errno := CreateWindowEx(
 		0,
 		wcname,
 		stringToUtf16Ptr("Gohl Test App"),
@@ -220,10 +220,8 @@ func makeWindow(html string, onCreate func(), onDestroy func()) uint32 {
 		0, 0, 20, 10,
 		0, 0, 0, 0)
 	if errno != ERROR_SUCCESS {
-		panic(errno)
+		log.Panic(errno)
 	}
-
-	return hwnd
 }
 
 func pump() {
@@ -232,7 +230,6 @@ func pump() {
 		if r, errno := GetMessage(&m, 0, 0, 0); errno != ERROR_SUCCESS {
 			panic(errno)
 		} else if r == 0 {
-			// WM_QUIT received -> get out
 			break
 		}
 		TranslateMessage(&m)
@@ -240,17 +237,209 @@ func pump() {
 	}
 }
 
+func testWithHtml(html string, test func(hwnd uint32)) {
+	m := extendHandlerMap(defaultHandlerMap, MsgHandlerMap{
+		WM_CREATE: func(hwnd uint32) interface{} {
+			ret := defaultHandlerMap[WM_CREATE](hwnd)
+			if err := LoadHtml(hwnd, []byte(html), ""); err != nil {
+				log.Panic(err)
+			}
+			test(hwnd)
+			PostMessage(hwnd, WM_CLOSE, 0, 0)
+			return ret
+		},
+	})
+	makeWindow(m)
+	pump()
+}
+
+
+
+
+// Variables and types for testing
+
+type MsgHandler func(uint32) interface{}
+type MsgHandlerMap map[uint32]MsgHandler
+
+var defaultHandlerMap = MsgHandlerMap{
+	WM_CREATE: func(hwnd uint32) interface{} {
+		//log.Print("WM_CREATE, hwnd = ", hwnd)
+		AttachNotifyHandler(hwnd, notifyHandler)
+		AttachWindowEventHandler(hwnd, windowEventHandler)
+		return 0
+	},
+	WM_SHOWWINDOW: func(hwnd uint32) interface{} {
+		return 0
+	},
+	WM_ERASEBKGND: func(hwnd uint32) interface{} {
+		return 0
+	},
+	WM_CLOSE: func(hwnd uint32) interface{} {
+		//log.Print("WM_CLOSE, hwnd = ", hwnd)
+		DetachWindowEventHandler(hwnd)
+		DetachNotifyHandler(hwnd)
+		DestroyWindow(hwnd)
+		return nil
+	},
+	WM_DESTROY: func(hwnd uint32) interface{} {
+		//log.Print("WM_DESTROY, hwnd = ", hwnd)
+		//DumpObjectCounts()
+		PostQuitMessage(0)
+		return 0
+	},
+	WM_QUIT: func(hwnd uint32) interface{} {
+		log.Print("hai, quitting")
+		return nil
+	},
+}
+
+// Page templates used for various tests
+var pages = map[string]string{
+	"empty":    ``,
+	"page":     `<html><body></body></html>`,
+	"one-div":  `<div id="a">a</div>`,
+	"two-divs": `<div id="a">a</div><div id="b">b</div>`,
+	"nested-divs": `<div id="a">a<div id="b">b</div></div>`,
+}
+
+// Notify handler deals with WM_NOTIFY messages sent by htmlayout
+var notifyHandler = &NotifyHandler{
+	OnLoadData: func(params *NmhlLoadData) uintptr {
+		relativePath := utf16ToString(params.Uri)
+		log.Print("Load resource request: ", relativePath)
+		return 0
+	},
+}
+
+// Window event handler gets first and last chance to process events
+var windowEventHandler = &EventHandler{}
+
+
+
+
+
+// Tests:
 
 func TestBasicWindow(t *testing.T) {
-	hwnd := makeWindow(
-		"<html></html>",
-		func() {
-			log.Print("Created")
+	m := extendHandlerMap(defaultHandlerMap, MsgHandlerMap{
+		WM_CREATE: func(hwnd uint32) interface{} {
+			ret := defaultHandlerMap[WM_CREATE](hwnd)
+			PostMessage(hwnd, WM_CLOSE, 0, 0)
+			return ret
 		},
-		func() {
-			log.Print("Destroyed")
-		})
-	go pump()
-	SendMessage(hwnd, WM_CLOSE, 0, 0)
-	log.Print("Done")
+	})
+	makeWindow(m)
+	pump()
 }
+
+func TestLoadHtml(t *testing.T) {
+	testWithHtml(pages["page"], func(hwnd uint32) {})
+}
+
+func TestLoadHtmlEmptyString(t *testing.T) {
+	testWithHtml(pages["empty"], func(hwnd uint32) {})
+}
+
+func TestRootElement(t *testing.T) {
+	testWithHtml(pages["one-div"], func(hwnd uint32) {
+		if e := RootElement(hwnd); e == nil {
+			t.Fatal("Could not get root elem")
+		}
+	})
+}
+
+func TestHandle(t *testing.T) {
+	testWithHtml(pages["one-div"], func(hwnd uint32) {
+		e := RootElement(hwnd)
+		if h := e.Handle(); h == nil {
+			t.Fatal("Handle was nil")
+		}
+	})
+}
+
+func TestRelease(t *testing.T) {
+	testWithHtml(pages["one-div"], func(hwnd uint32) {
+		e := RootElement(hwnd)
+		e.Release()
+		if h := e.Handle(); h != nil {
+			t.Fatal("Released but handle is not nil, finalizer not called?")
+		}
+	})
+}
+
+func TestChildCount(t *testing.T) {
+	testWithHtml(pages["two-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		if count := root.ChildCount(); count != 2 {
+			t.Fatal("Expected two divs as children")
+		}
+	})
+}
+
+func TestChildCount2(t *testing.T) {
+	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		if count := root.ChildCount(); count != 1 {
+			t.Fatal("Expected one divs as child")
+		}
+	})
+}
+
+func TestChild(t *testing.T) {
+	testWithHtml(pages["two-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d1 := root.Child(0)
+		d2 := root.Child(1)
+		if d1 == nil || d2 == nil {
+			t.Fatal("A child element could not be retrieved by index")
+		}
+	})
+}
+
+func TestIndex(t *testing.T) {
+	testWithHtml(pages["two-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d1 := root.Child(0)
+		d2 := root.Child(1)
+		if d1.Index() != 0 {
+			t.Fatal("Expected index 0")
+		}
+		if d2.Index() != 1 {
+			t.Fatal("Expected index 1")
+		}
+	})
+}
+
+func TestEquals(t *testing.T) {
+	testWithHtml(pages["one-div"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d1 := root.Child(0)
+		if root.Equals(d1) {
+			t.Fatal("Distinct elems should not be equal")
+		}
+		if !d1.Equals(d1) {
+			t.Fatal("Same elements should be equal")
+		}
+	})
+}
+
+func TestParent(t *testing.T) {
+	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d1 := root.Child(0)
+		d2 := d1.Child(0)
+		
+		if !d2.Parent().Equals(d1) {
+			t.Fatal("Parent was not the expected elem")
+		}
+		if !d1.Parent().Equals(root) {
+			t.Fatal("Parent was not the expected elem")
+		}
+		if root.Parent() != nil {
+			t.Fatal("Root's parent should be nil")
+		}
+	})
+}
+
+
+

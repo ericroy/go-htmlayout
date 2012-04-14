@@ -1,25 +1,25 @@
 package gohl
 
 type EventHandler struct {
-	OnAttached func(he HELEMENT)
-	OnDetached func(he HELEMENT)
-	OnMouse func(he HELEMENT, params *MouseParams) bool
-	OnKey func(he HELEMENT, params *KeyParams) bool
-	OnFocus func(he HELEMENT, params *FocusParams) bool
-	OnDraw func(he HELEMENT, params *DrawParams) bool
-	OnTimer func(he HELEMENT, params *TimerParams) bool
+	OnAttached      func(he HELEMENT)
+	OnDetached      func(he HELEMENT)
+	OnMouse         func(he HELEMENT, params *MouseParams) bool
+	OnKey           func(he HELEMENT, params *KeyParams) bool
+	OnFocus         func(he HELEMENT, params *FocusParams) bool
+	OnDraw          func(he HELEMENT, params *DrawParams) bool
+	OnTimer         func(he HELEMENT, params *TimerParams) bool
 	OnBehaviorEvent func(he HELEMENT, params *BehaviorEventParams) bool
-	OnMethodCall func(he HELEMENT, params *MethodParams) bool
-	OnDataArrived func(he HELEMENT, params *DataArrivedParams) bool
-	OnSize func(he HELEMENT)
-	OnScroll func(he HELEMENT, params *ScrollParams) bool
-	OnExchange func(he HELEMENT, params *ExchangeParams) bool
-	OnGesture func(he HELEMENT, params *GestureParams) bool
+	OnMethodCall    func(he HELEMENT, params *MethodParams) bool
+	OnDataArrived   func(he HELEMENT, params *DataArrivedParams) bool
+	OnSize          func(he HELEMENT)
+	OnScroll        func(he HELEMENT, params *ScrollParams) bool
+	OnExchange      func(he HELEMENT, params *ExchangeParams) bool
+	OnGesture       func(he HELEMENT, params *GestureParams) bool
 }
 
 func (e *EventHandler) Subscription() uint32 {
 	var subscription uint32 = 0
-	add := func (f interface{}, flag uint32) {
+	add := func(f interface{}, flag uint32) {
 		if f != nil {
 			subscription |= flag
 		}

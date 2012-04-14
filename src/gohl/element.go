@@ -1,4 +1,5 @@
 package gohl
+
 /*
 #cgo CFLAGS: -I../../htmlayout/include
 #cgo LDFLAGS: ../../htmlayout/lib/HTMLayout.lib
@@ -18,8 +19,8 @@ import (
 	"log"
 	"runtime"
 	"strconv"
-	"unsafe"
 	"unicode/utf16"
+	"unsafe"
 )
 
 const (
@@ -53,7 +54,7 @@ func (self DomError) String() string {
 	return fmt.Sprintf("%s: %s", errorToString[self.Result], self.Message)
 }
 
-func domPanic(result C.HLDOM_RESULT, message... interface{}) {
+func domPanic(result C.HLDOM_RESULT, message ...interface{}) {
 	log.Panic(DomError{result, fmt.Sprint(message...)})
 }
 
@@ -139,7 +140,6 @@ func FocusedElement(hwnd uint32) *Element {
 	return nil
 }
 
-
 // Finalizer method, only to be called from Release or by
 // the Go runtime
 func (e *Element) finalize() {
@@ -182,8 +182,8 @@ func (e *Element) AttachHandler(handler *EventHandler) {
 	// won't know when to throw out our event handler object
 	subscription := handler.Subscription()
 	subscription &= ^DISABLE_INITIALIZATION
-	
-	if subscription  == HANDLE_ALL {
+
+	if subscription == HANDLE_ALL {
 		if ret := C.HTMLayoutAttachEventHandler(e.handle, C.ElementProcAddr, C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to attach event handler to element")
 		}
@@ -261,7 +261,6 @@ func (e *Element) SelectParent(selector string) *Element {
 	return e.SelectParentLimit(selector, 0)
 }
 
-
 // For delivering programmatic events to the elements
 // Returns true if the event was handled, false otherwise
 func (e *Element) SendEvent(destination *Element, eventCode uint, source *Element, reason uintptr) bool {
@@ -271,7 +270,6 @@ func (e *Element) SendEvent(destination *Element, eventCode uint, source *Elemen
 	}
 	return handled != 0
 }
-
 
 // DOM structure accessors/modifiers:
 
