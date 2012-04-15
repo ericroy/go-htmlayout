@@ -14,6 +14,7 @@ const (
 	WM_QUIT       = 0x0012
 	WM_ERASEBKGND = 0x0014
 	WM_SHOWWINDOW = 0x0018
+	WM_USER		  = 0x0400
 	ERROR_SUCCESS = 0
 )
 
@@ -31,7 +32,9 @@ var (
 	procSendMessageW     = moduser32.NewProc("SendMessageW")
 	procPostMessageW     = moduser32.NewProc("PostMessageW")
 
-	classRegistered = false
+	registeredClasses = make(map[string]bool, 4)
+	testPages = make(chan string, 1)
+	testFuncs = make(chan func(uint32), 1)
 )
 
 type Wndclassex struct {
@@ -153,18 +156,7 @@ func PostMessage(hwnd uint32, msg uint32, wparam uintptr, lparam uintptr) (err s
 
 // Utility functions for creating a testing window, etc
 
-func extendHandlerMap(original, extras MsgHandlerMap) MsgHandlerMap {
-	m := make(MsgHandlerMap, 32)
-	for k, v := range original {
-		m[k] = v
-	}
-	for k, v := range extras {
-		m[k] = v
-	}
-	return m
-}
-
-func makeWindow(callbacks MsgHandlerMap) {
+func registerWindow(callbacks MsgHandlerMap, windowName string) {
 
 	wproc := syscall.NewCallback(func(hwnd, msg uint32, wparam uintptr, lparam uintptr) uintptr {
 		if result, handled := ProcNoDefault(hwnd, msg, wparam, lparam); handled {
@@ -190,29 +182,25 @@ func makeWindow(callbacks MsgHandlerMap) {
 		return uintptr(code)
 	})
 
-	// RegisterClassEx
-	wcname := stringToUtf16Ptr("gohlTesting")
+	var wc Wndclassex
+	wc.Size = uint32(unsafe.Sizeof(wc))
+	wc.WndProc = wproc
+	wc.Instance = 0
+	wc.Icon = 0
+	wc.Cursor = 0
+	wc.Background = 0
+	wc.MenuName = nil
+	wc.ClassName = stringToUtf16Ptr(windowName)
+	wc.IconSm = 0
 
-	if !classRegistered {
-		var wc Wndclassex
-		wc.Size = uint32(unsafe.Sizeof(wc))
-		wc.WndProc = wproc
-		wc.Instance = 0
-		wc.Icon = 0
-		wc.Cursor = 0
-		wc.Background = 0
-		wc.MenuName = nil
-		wc.ClassName = wcname
-		wc.IconSm = 0
-
-		if _, errno := RegisterClassEx(&wc); errno != ERROR_SUCCESS {
-			log.Panic(errno)
-		}
-
-		classRegistered = true
+	if _, errno := RegisterClassEx(&wc); errno != ERROR_SUCCESS {
+		log.Panic(errno)
 	}
+}
 
-	_, errno := CreateWindowEx(
+func createWindow(windowName string) uint32 {
+	wcname := stringToUtf16Ptr(windowName)
+	hwnd, errno := CreateWindowEx(
 		0,
 		wcname,
 		stringToUtf16Ptr("Gohl Test App"),
@@ -222,6 +210,7 @@ func makeWindow(callbacks MsgHandlerMap) {
 	if errno != ERROR_SUCCESS {
 		log.Panic(errno)
 	}
+	return hwnd
 }
 
 func pump() {
@@ -238,18 +227,26 @@ func pump() {
 }
 
 func testWithHtml(html string, test func(hwnd uint32)) {
-	m := extendHandlerMap(defaultHandlerMap, MsgHandlerMap{
-		WM_CREATE: func(hwnd uint32) interface{} {
+	if !registeredClasses["html"] {
+		m := make(MsgHandlerMap, 32)
+		for k, v := range defaultHandlerMap {
+			m[k] = v
+		}
+		m[WM_CREATE] = func(hwnd uint32) interface{} {
 			ret := defaultHandlerMap[WM_CREATE](hwnd)
-			if err := LoadHtml(hwnd, []byte(html), ""); err != nil {
+			if err := LoadHtml(hwnd, []byte(<-testPages), ""); err != nil {
 				log.Panic(err)
 			}
-			test(hwnd)
+			(<-testFuncs)(hwnd)
 			PostMessage(hwnd, WM_CLOSE, 0, 0)
 			return ret
-		},
-	})
-	makeWindow(m)
+		}
+		registerWindow(m, "html")
+		registeredClasses["html"] = true
+	}
+	testPages <- html
+	testFuncs <- test
+	_ = createWindow("html")
 	pump()
 }
 
@@ -287,10 +284,6 @@ var defaultHandlerMap = MsgHandlerMap{
 		PostQuitMessage(0)
 		return 0
 	},
-	WM_QUIT: func(hwnd uint32) interface{} {
-		log.Print("hai, quitting")
-		return nil
-	},
 }
 
 // Page templates used for various tests
@@ -303,13 +296,7 @@ var pages = map[string]string{
 }
 
 // Notify handler deals with WM_NOTIFY messages sent by htmlayout
-var notifyHandler = &NotifyHandler{
-	OnLoadData: func(params *NmhlLoadData) uintptr {
-		relativePath := utf16ToString(params.Uri)
-		log.Print("Load resource request: ", relativePath)
-		return 0
-	},
-}
+var notifyHandler = &NotifyHandler{}
 
 // Window event handler gets first and last chance to process events
 var windowEventHandler = &EventHandler{}
@@ -321,23 +308,33 @@ var windowEventHandler = &EventHandler{}
 // Tests:
 
 func TestBasicWindow(t *testing.T) {
-	m := extendHandlerMap(defaultHandlerMap, MsgHandlerMap{
-		WM_CREATE: func(hwnd uint32) interface{} {
-			ret := defaultHandlerMap[WM_CREATE](hwnd)
-			PostMessage(hwnd, WM_CLOSE, 0, 0)
-			return ret
-		},
-	})
-	makeWindow(m)
+	// A channel to receive the hwnd once the window is created
+	created := make(chan uint32)
+
+	// Wait until the window is created, then post a message to close it
+	go func() {
+		PostMessage(<-created, WM_CLOSE, 0, 0)
+	}()
+	
+	if !registeredClasses["basic"] {
+		// Setup the window message handlers
+		// Customize the WM_CREATE handler so that sends the hwnd to our channel
+		handler := make(MsgHandlerMap, 32)
+		for k, v := range defaultHandlerMap {
+			handler[k] = v
+		}
+		handler[WM_CREATE] = func(hwnd uint32) interface{} {
+			created <- hwnd
+			return defaultHandlerMap[WM_CREATE](hwnd)
+		}
+		registerWindow(handler, "basic")
+	}
+	_ = createWindow("basic")
 	pump()
 }
 
 func TestLoadHtml(t *testing.T) {
 	testWithHtml(pages["page"], func(hwnd uint32) {})
-}
-
-func TestLoadHtmlEmptyString(t *testing.T) {
-	testWithHtml(pages["empty"], func(hwnd uint32) {})
 }
 
 func TestRootElement(t *testing.T) {
@@ -437,6 +434,96 @@ func TestParent(t *testing.T) {
 		}
 		if root.Parent() != nil {
 			t.Fatal("Root's parent should be nil")
+		}
+	})
+}
+
+func TestSelect(t *testing.T) {
+	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		results := root.Select("div > div")
+		if len(results) != 1 {
+			t.Fatal("Expected one result")
+		}
+		if !results[0].Equals(root.Child(0).Child(0)) {
+			t.Fatal("Expected to match inner div")
+		}
+	})
+}
+
+func TestSelectParent(t *testing.T) {
+	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		if result := root.SelectParent("*:has-child-of-type(div):has-child-of-type(div)"); !result.Equals(root) {
+			t.Fatal("Expected to match root element")
+		}
+	})
+}
+
+func TestSelectParentLimit(t *testing.T) {
+	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+
+		// Depth=0 means search all the way up to root
+		if result := root.SelectParentLimit("*:has-child-of-type(div):has-child-of-type(div)", 0); !result.Equals(root) {
+			t.Fatal("Expected to match root elem")
+		}
+
+		// Depth=1 means only consider receiver element, should not match
+		if result := root.SelectParentLimit("*:has-child-of-type(div)", 1); result != nil {
+			t.Fatal("Expected to only check current element, and not match it")
+		}
+
+		// Depth=2 means consider first parent, should match
+		if result := root.SelectParentLimit("*:has-child-of-type(div)", 2); !result.Equals(root.Child(0)) {
+			t.Fatal("Expected to match outer div")
+		}
+	})
+}
+
+func TestType(t *testing.T) {
+	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		if root.Type() != "asdf" {
+			t.Fatal("Type of root elem should be empty string")
+		}
+	})
+}
+
+func TestOuterHtml(t *testing.T) {
+	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		if root.OuterHtml() != pages["nested-divs"] {
+			t.Fatal("Outer html of root elem should match original html")
+		}
+
+		d1 := root.Child(0)
+		if d1.OuterHtml() != pages["nested-divs"] {
+			t.Fatal("Outer html of first elem should match original html")
+		}
+
+		d2 := d1.Child(0)
+		if d2.OuterHtml() != `<div id="b">b</div>` {
+			t.Fatal("Outer html of innermost div should be the div itself")
+		}
+	})
+}
+
+func TestHtml(t *testing.T) {
+	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		if root.Html() != pages["nested-divs"] {
+			t.Fatal("Inner html of root elem should match original html")
+		}
+
+		d1 := root.Child(0)
+		if d1.Html() != `<div id="b">b</div>` {
+			t.Fatal("Inner html of first div should match html of innermost div")
+		}
+
+		d2 := d1.Child(0)
+		if d2.Html() != `b` {
+			t.Fatal("Inner html of innermost div be the div's contents")
 		}
 	})
 }

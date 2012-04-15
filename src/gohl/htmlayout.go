@@ -6,11 +6,6 @@ package gohl
 
 #include <stdlib.h>
 #include <htmlayout.h>
-
-extern LPELEMENT_EVENT_PROC ElementProcAddr;
-extern LPHTMLAYOUT_NOTIFY NotifyProcAddr;
-extern HTMLayoutElementCallback *SelectCallbackAddr;
-extern ELEMENT_COMPARATOR *ElementComparatorAddr;
 */
 import "C"
 
@@ -18,6 +13,7 @@ import (
 	"errors"
 	"log"
 	"unsafe"
+	"syscall"
 )
 
 const (
@@ -486,8 +482,7 @@ type NmhlAttachBehavior struct {
 }
 
 // Main event handler that dispatches to the right element handler
-//export goElementProc 
-func goElementProc(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Pointer) C.BOOL {
+var goElementProc = syscall.NewCallback(func (tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Pointer) C.BOOL {
 	key := uintptr(tag)
 
 	var handler *EventHandler
@@ -578,10 +573,9 @@ func goElementProc(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Po
 		return C.TRUE
 	}
 	return C.FALSE
-}
+})
 
-//export goNotifyProc
-func goNotifyProc(msg uint32, wparam uintptr, lparam uintptr, vparam uintptr) uintptr {
+var goNotifyProc = syscall.NewCallback(func (msg uint32, wparam uintptr, lparam uintptr, vparam uintptr) uintptr {
 	if handler, exists := notifyHandlers[vparam]; exists {
 		phdr := (*C.NMHDR)(unsafe.Pointer(lparam))
 
@@ -621,20 +615,18 @@ func goNotifyProc(msg uint32, wparam uintptr, lparam uintptr, vparam uintptr) ui
 		}
 	}
 	return 0
-}
+})
 
-//export goSelectCallback
-func goSelectCallback(he unsafe.Pointer, param uintptr) uintptr {
+var goSelectCallback = syscall.NewCallback(func (he unsafe.Pointer, param uintptr) uintptr {
 	slice := (*[]*Element)(unsafe.Pointer(param))
 	*slice = append(*slice, NewElement(HELEMENT(he)))
 	return 0
-}
+})
 
-//export goElementComparator
-func goElementComparator(he1 unsafe.Pointer, he2 unsafe.Pointer, arg uintptr) int {
+var goElementComparator = syscall.NewCallback(func (he1 unsafe.Pointer, he2 unsafe.Pointer, arg uintptr) int {
 	cmp := *(*func(*Element, *Element) int)(unsafe.Pointer(arg))
 	return cmp(NewElement(HELEMENT(he1)), NewElement(HELEMENT(he2)))
-}
+})
 
 // Main htmlayout wndproc
 func ProcNoDefault(hwnd, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
@@ -664,7 +656,7 @@ func DataReady(hwnd uint32, uri *uint16, data []byte) bool {
 func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 	key := uintptr(hwnd)
 	if _, exists := eventHandlers[key]; exists {
-		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(key)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from window before adding the new one")
 		}
 	}
@@ -677,7 +669,7 @@ func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 	subscription := handler.Subscription()
 	subscription &= ^DISABLE_INITIALIZATION
 
-	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key), C.UINT(subscription)); ret != HLDOM_OK {
+	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(key), C.UINT(subscription)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to attach event handler to window")
 	}
 }
@@ -685,7 +677,7 @@ func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 func DetachWindowEventHandler(hwnd uint32) {
 	key := uintptr(hwnd)
 	if _, exists := eventHandlers[key]; exists {
-		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), C.ElementProcAddr, C.LPVOID(key)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(key)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from window")
 		}
 		delete(eventHandlers, key)
@@ -696,7 +688,7 @@ func AttachNotifyHandler(hwnd uint32, handler *NotifyHandler) {
 	key := uintptr(hwnd)
 	// Overwrite if it exists
 	notifyHandlers[key] = handler
-	C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), C.NotifyProcAddr, C.LPVOID(key))
+	C.HTMLayoutSetCallback(C.HWND(C.HANDLE(key)), (*[0]byte)(unsafe.Pointer(goNotifyProc)), C.LPVOID(key))
 }
 
 func DetachNotifyHandler(hwnd uint32) {
