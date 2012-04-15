@@ -6,7 +6,9 @@ Go-htmlayout is written for Go1.  Most of the HTMLayout API has been wrapped (es
 
 # Getting started
 Clone the repo.  In the main directory of the repository, run the following to fetch the latest version of HTMLayout:
+
 ```bash
 python get_htmlayout.py
 ```
+
 Though the tests provide an example of how to get started using gohl, there are probably better examples of window creation/management elsewhere on the internet.
