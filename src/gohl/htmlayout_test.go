@@ -226,7 +226,7 @@ func pump() {
 	}
 }
 
-func equalWithoutWhitespace(a, b string) bool {
+func looseEqual(a, b string) bool {
 	if re, err := regexp.Compile(`\s+`); err != nil {
 		log.Panic(err)
 	} else {
@@ -516,7 +516,7 @@ func TestOuterHtml(t *testing.T) {
 	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
 		root := RootElement(hwnd)
 		expected := "<html>"+pages["nested-divs"]+"</html>"
-		if !equalWithoutWhitespace(expected, root.OuterHtml()) {
+		if !looseEqual(expected, root.OuterHtml()) {
 			t.Fatal("Outer html of root elem not as expected")
 		}
 	})
@@ -525,17 +525,17 @@ func TestOuterHtml(t *testing.T) {
 func TestHtml(t *testing.T) {
 	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
 		root := RootElement(hwnd)
-		if !equalWithoutWhitespace(root.Html(), pages["nested-divs"]) {
+		if !looseEqual(root.Html(), pages["nested-divs"]) {
 			t.Fatal("Inner html of root elem should match original html")
 		}
 
 		d1 := root.Child(0)
-		if !equalWithoutWhitespace(d1.Html(), `<div id="b"></div>`) {
+		if !looseEqual(d1.Html(), `<div id="b"></div>`) {
 			t.Fatal("Inner html of first div should match html of innermost div")
 		}
 
 		d2 := d1.Child(0)
-		if !equalWithoutWhitespace(d2.Html(), ``) {
+		if !looseEqual(d2.Html(), ``) {
 			t.Fatal("Inner html of innermost div be the div's contents")
 		}
 	})
@@ -547,12 +547,12 @@ func TestInsertChild(t *testing.T) {
 		d := root.Child(0)
 		e := NewElement("div")
 		d.InsertChild(e, 0)
-		if !equalWithoutWhitespace(d.Html(), `<div></div>`) {
+		if !looseEqual(d.Html(), `<div></div>`) {
 			t.Fatal("Inserting element created unexpected html: ", d.Html())
 		}
 		e = NewElement("span")
 		d.InsertChild(e, 0)
-		if !equalWithoutWhitespace(d.Html(), `<span></span><div></div>`) {
+		if !looseEqual(d.Html(), `<span></span><div></div>`) {
 			t.Fatal("Inserting element created unexpected html: ", d.Html())
 		}
 	})
@@ -564,12 +564,12 @@ func TestAppendChild(t *testing.T) {
 		d := root.Child(0)
 		e := NewElement("div")
 		d.AppendChild(e)
-		if !equalWithoutWhitespace(d.Html(), `<div></div>`) {
+		if !looseEqual(d.Html(), `<div></div>`) {
 			t.Fatal("Inserting element created unexpected html: ", d.Html())
 		}
 		e = NewElement("span")
 		d.AppendChild(e)
-		if !equalWithoutWhitespace(d.Html(), `<div></div><span></span>`) {
+		if !looseEqual(d.Html(), `<div></div><span></span>`) {
 			t.Fatal("Inserting element created unexpected html: ", d.Html())
 		}
 	})
@@ -583,13 +583,13 @@ func TestDetach(t *testing.T) {
 		
 		// Pull the inner div out of the dom
 		inner.Detach()
-		if !equalWithoutWhitespace(d.Html(), ``) {
+		if !looseEqual(d.Html(), ``) {
 			t.Fatal("Element should not have any contents after detaching its only child")
 		}
 
 		// Put it back in
 		d.AppendChild(inner)
-		if !equalWithoutWhitespace(d.Html(), inner.OuterHtml()) {
+		if !looseEqual(d.Html(), inner.OuterHtml()) {
 			t.Fatal("Element should not have any contents after detaching its only child")
 		}
 	})
@@ -602,7 +602,7 @@ func TestDelete(t *testing.T) {
 		inner := d.Child(0)
 		
 		inner.Delete()
-		if !equalWithoutWhitespace(d.Html(), ``) {
+		if !looseEqual(d.Html(), ``) {
 			t.Fatal("Element should not have any contents after detaching its only child")
 		}
 
@@ -621,7 +621,7 @@ func TestClone(t *testing.T) {
 		if clone.Type() != "div" {
 			t.Fatal("Clone should have same type as original")
 		}
-		if !equalWithoutWhitespace(clone.Html(), `a`) {
+		if !looseEqual(clone.Html(), `a`) {
 			t.Fatal("Clone should have same contents as original")
 		}
 	})
@@ -633,7 +633,7 @@ func TestSwap(t *testing.T) {
 		a := root.Child(0)
 		b := root.Child(1)
 		a.Swap(b)
-		if !equalWithoutWhitespace(root.Html(), `<div id="b"></div><div id="a"></div>`) {
+		if !looseEqual(root.Html(), `<div id="b"></div><div id="a"></div>`) {
 			t.Fatal("Clone should have same contents as original")
 		}
 	})
@@ -653,7 +653,7 @@ func TestSortChildren(t *testing.T) {
 	testWithHtml(`<div>c</div><div>b</div><div>a</div>`, func(hwnd uint32) {
 		root := RootElement(hwnd)
 		root.SortChildren(cmp)
-		if !equalWithoutWhitespace(root.Html(), `<div>a</div><div>b</div><div>c</div>`) {
+		if !looseEqual(root.Html(), `<div>a</div><div>b</div><div>c</div>`) {
 			t.Fatal("Sorted elements should be in alphabetically descending order")
 		}
 	})
@@ -673,7 +673,7 @@ func TestSortChildrenRange(t *testing.T) {
 	testWithHtml(`<div>c</div><div>b</div><div>a</div>`, func(hwnd uint32) {
 		root := RootElement(hwnd)
 		root.SortChildrenRange(0, 2, cmp)
-		if !equalWithoutWhitespace(root.Html(), `<div>b</div><div>c</div><div>a</div>`) {
+		if !looseEqual(root.Html(), `<div>b</div><div>c</div><div>a</div>`) {
 			t.Fatal("First two elements should be in alphabetically descending order")
 		}
 	})
@@ -717,7 +717,7 @@ func TestSetHtml(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 		d.SetHtml("<span></span>")
-		if !equalWithoutWhitespace(d.Html(), `<span></span>`) {
+		if !looseEqual(d.Html(), `<span></span>`) {
 			t.Fatal("Element should contain new html")
 		}
 	})
@@ -727,7 +727,7 @@ func TestPrependHtml(t *testing.T) {
 	testWithHtml(pages["one-div"], func(hwnd uint32) {
 		root := RootElement(hwnd)
 		root.PrependHtml("<span></span>")
-		if !equalWithoutWhitespace(root.Html(), `<span></span><div id="a"></div>`) {
+		if !looseEqual(root.Html(), `<span></span><div id="a"></div>`) {
 			t.Fatal("Expected prepended html in front of existing contents")
 		}
 	})
@@ -737,7 +737,7 @@ func TestAppendHtml(t *testing.T) {
 	testWithHtml(pages["one-div"], func(hwnd uint32) {
 		root := RootElement(hwnd)
 		root.AppendHtml("<span></span>")
-		if !equalWithoutWhitespace(root.Html(), `<div id="a"></div><span></span>`) {
+		if !looseEqual(root.Html(), `<div id="a"></div><span></span>`) {
 			t.Fatal("Expected appended html at the end of existing contents")
 		}
 	})
@@ -747,7 +747,7 @@ func TestSetText(t *testing.T) {
 	testWithHtml(pages["one-div"], func(hwnd uint32) {
 		root := RootElement(hwnd)
 		root.SetText("Hi")
-		if !equalWithoutWhitespace(root.Html(), `Hi`) {
+		if !looseEqual(root.Html(), `Hi`) {
 			t.Fatal("Setting the text should have replaced inner html")
 		}
 	})
