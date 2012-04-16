@@ -25,25 +25,25 @@ const (
 	HLDOM_PASSIVE_HANDLE    = C.HLDOM_PASSIVE_HANDLE
 	HLDOM_INVALID_PARAMETER = C.HLDOM_INVALID_PARAMETER
 	HLDOM_OPERATION_FAILED  = C.HLDOM_OPERATION_FAILED
-	HLDOM_OK_NOT_HANDLED    = C.int(-1)
+	HLDOM_OK_NOT_HANDLED    = C.HLDOM_OK_NOT_HANDLED
 
 	BAD_HELEMENT = HELEMENT(unsafe.Pointer(uintptr(0)))
 )
 
-var errorToString = map[C.HLDOM_RESULT]string{
-	C.HLDOM_OK:                "HLDOM_OK",
-	C.HLDOM_INVALID_HWND:      "HLDOM_INVALID_HWND",
-	C.HLDOM_INVALID_HANDLE:    "HLDOM_INVALID_HANDLE",
-	C.HLDOM_PASSIVE_HANDLE:    "HLDOM_PASSIVE_HANDLE",
-	C.HLDOM_INVALID_PARAMETER: "HLDOM_INVALID_PARAMETER",
-	C.HLDOM_OPERATION_FAILED:  "HLDOM_OPERATION_FAILED",
-	C.HLDOM_OK_NOT_HANDLED:    "HLDOM_OK_NOT_HANDLED",
+var errorToString = map[HLDOM_RESULT]string{
+	HLDOM_OK:                "HLDOM_OK",
+	HLDOM_INVALID_HWND:      "HLDOM_INVALID_HWND",
+	HLDOM_INVALID_HANDLE:    "HLDOM_INVALID_HANDLE",
+	HLDOM_PASSIVE_HANDLE:    "HLDOM_PASSIVE_HANDLE",
+	HLDOM_INVALID_PARAMETER: "HLDOM_INVALID_PARAMETER",
+	HLDOM_OPERATION_FAILED:  "HLDOM_OPERATION_FAILED",
+	HLDOM_OK_NOT_HANDLED:    "HLDOM_OK_NOT_HANDLED",
 }
 
 // DomError represents an htmlayout error with an associated
 // dom error code
 type DomError struct {
-	Result  C.HLDOM_RESULT
+	Result  HLDOM_RESULT
 	Message string
 }
 
@@ -51,8 +51,12 @@ func (self DomError) String() string {
 	return fmt.Sprintf("%s: %s", errorToString[self.Result], self.Message)
 }
 
+func domResultAsString(result HLDOM_RESULT) string {
+	return errorToString[result]
+}
+
 func domPanic(result C.HLDOM_RESULT, message ...interface{}) {
-	log.Panic(DomError{result, fmt.Sprint(message...)})
+	panic(DomError{HLDOM_RESULT(result), fmt.Sprint(message...)})
 }
 
 // Returns the utf-16 encoding of the utf-8 string s,
@@ -108,7 +112,7 @@ type Element struct {
 }
 
 // Constructors
-func NewElement(h HELEMENT) *Element {
+func NewElementFromHandle(h HELEMENT) *Element {
 	if h == BAD_HELEMENT {
 		panic("Nil helement")
 	}
@@ -118,12 +122,22 @@ func NewElement(h HELEMENT) *Element {
 	return e
 }
 
+func NewElement(tagName string) *Element {
+	var handle HELEMENT = BAD_HELEMENT
+	szName := C.CString(tagName)
+	defer C.free(unsafe.Pointer(szName))
+	if ret := C.HTMLayoutCreateElement((*C.CHAR)(szName), nil,  (*C.HELEMENT)(&handle)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to create new element")
+	}
+	return NewElementFromHandle(handle)
+}
+
 func RootElement(hwnd uint32) *Element {
 	var handle HELEMENT = BAD_HELEMENT
 	if ret := C.HTMLayoutGetRootElement(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.HELEMENT)(&handle)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get root element")
 	}
-	return NewElement(handle)
+	return NewElementFromHandle(handle)
 }
 
 func FocusedElement(hwnd uint32) *Element {
@@ -132,7 +146,7 @@ func FocusedElement(hwnd uint32) *Element {
 		domPanic(ret, "Failed to get focus element")
 	}
 	if handle != BAD_HELEMENT {
-		return NewElement(handle)
+		return NewElementFromHandle(handle)
 	}
 	return nil
 }
@@ -185,7 +199,7 @@ func (e *Element) AttachHandler(handler *EventHandler) {
 			domPanic(ret, "Failed to attach event handler to element")
 		}
 	} else {
-		if ret := C.HTMLayoutAttachEventHandlerEx(e.handle,  (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutAttachEventHandlerEx(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to attach event handler to element")
 		}
 	}
@@ -194,7 +208,7 @@ func (e *Element) AttachHandler(handler *EventHandler) {
 func (e *Element) DetachHandler(handler *EventHandler) {
 	tag := uintptr(unsafe.Pointer(handler))
 	if _, exists := eventHandlers[tag]; exists {
-		if ret := C.HTMLayoutDetachEventHandler(e.handle,  (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
+		if ret := C.HTMLayoutDetachEventHandler(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from element")
 		}
 		delete(eventHandlers, tag)
@@ -249,7 +263,7 @@ func (e *Element) SelectParentLimit(selector string, depth int) *Element {
 		domPanic(ret, "Failed to select parent dom elements, selector: '", selector, "'")
 	}
 	if parent != nil {
-		return NewElement(HELEMENT(parent))
+		return NewElementFromHandle(HELEMENT(parent))
 	}
 	return nil
 }
@@ -283,7 +297,7 @@ func (e *Element) Child(index uint) *Element {
 	if ret := C.HTMLayoutGetNthChild(e.handle, C.UINT(index), &child); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get child at index: ", index)
 	}
-	return NewElement(HELEMENT(child))
+	return NewElementFromHandle(HELEMENT(child))
 }
 
 func (e *Element) Children() []*Element {
@@ -308,20 +322,20 @@ func (e *Element) Parent() *Element {
 		domPanic(ret, "Failed to get parent")
 	}
 	if parent != nil {
-		return NewElement(HELEMENT(parent))
+		return NewElementFromHandle(HELEMENT(parent))
 	}
 	return nil
 }
 
 func (e *Element) InsertChild(child *Element, index uint) {
-	if ret := C.HTMLayoutInsertElement(e.handle, child.handle, C.UINT(index)); ret != HLDOM_OK {
+	if ret := C.HTMLayoutInsertElement(child.handle, e.handle, C.UINT(index)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to insert child element at index: ", index)
 	}
 }
 
 func (e *Element) AppendChild(child *Element) {
 	count := e.ChildCount()
-	if ret := C.HTMLayoutInsertElement(e.handle, child.handle, C.UINT(count)); ret != HLDOM_OK {
+	if ret := C.HTMLayoutInsertElement(child.handle, e.handle, C.UINT(count)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to append child element")
 	}
 }
@@ -345,7 +359,7 @@ func (e *Element) Clone() *Element {
 	if ret := C.HTMLayoutCloneElement(e.handle, &clone); ret != HLDOM_OK {
 		domPanic(ret, "Failed to clone element")
 	}
-	return NewElement(HELEMENT(clone))
+	return NewElementFromHandle(HELEMENT(clone))
 }
 
 func (e *Element) Swap(other *Element) {
@@ -396,7 +410,7 @@ func (e *Element) RootHwnd() uint32 {
 
 func (e *Element) Html() string {
 	var data *C.char
-	if ret := C.HTMLayoutGetElementHtml(e.handle, (*C.LPBYTE)(unsafe.Pointer(data)), C.BOOL(0)); ret != HLDOM_OK {
+	if ret := C.HTMLayoutGetElementHtml(e.handle, (*C.LPBYTE)(unsafe.Pointer(&data)), C.BOOL(0)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get inner html")
 	}
 	return C.GoString(data)
@@ -404,15 +418,15 @@ func (e *Element) Html() string {
 
 func (e *Element) OuterHtml() string {
 	var data *C.char
-	if ret := C.HTMLayoutGetElementHtml(e.handle, (*C.LPBYTE)(unsafe.Pointer(data)), C.BOOL(1)); ret != HLDOM_OK {
-		domPanic(ret, "Failed to get inner html")
+	if ret := C.HTMLayoutGetElementHtml(e.handle, (*C.LPBYTE)(unsafe.Pointer(&data)), C.BOOL(1)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get outer html")
 	}
 	return C.GoString(data)
 }
 
 func (e *Element) Type() string {
 	var data *C.char
-	if ret := C.HTMLayoutGetElementType(e.handle, (*C.LPCSTR)(unsafe.Pointer(data))); ret != HLDOM_OK {
+	if ret := C.HTMLayoutGetElementType(e.handle, (*C.LPCSTR)(unsafe.Pointer(&data))); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get element type")
 	}
 	return C.GoString(data)

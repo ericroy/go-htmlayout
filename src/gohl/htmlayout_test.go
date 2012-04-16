@@ -5,6 +5,7 @@ import (
 	"syscall"
 	"testing"
 	"unsafe"
+	"regexp"
 )
 
 const (
@@ -14,7 +15,7 @@ const (
 	WM_QUIT       = 0x0012
 	WM_ERASEBKGND = 0x0014
 	WM_SHOWWINDOW = 0x0018
-	WM_USER		  = 0x0400
+	WM_USER       = 0x0400
 	ERROR_SUCCESS = 0
 )
 
@@ -33,8 +34,8 @@ var (
 	procPostMessageW     = moduser32.NewProc("PostMessageW")
 
 	registeredClasses = make(map[string]bool, 4)
-	testPages = make(chan string, 1)
-	testFuncs = make(chan func(uint32), 1)
+	testPages         = make(chan string, 1)
+	testFuncs         = make(chan func(uint32), 1)
 )
 
 type Wndclassex struct {
@@ -153,7 +154,6 @@ func PostMessage(hwnd uint32, msg uint32, wparam uintptr, lparam uintptr) (err s
 	return
 }
 
-
 // Utility functions for creating a testing window, etc
 
 func registerWindow(callbacks MsgHandlerMap, windowName string) {
@@ -226,6 +226,26 @@ func pump() {
 	}
 }
 
+func equalWithoutWhitespace(a, b string) bool {
+	if re, err := regexp.Compile(`\s+`); err != nil {
+		log.Panic(err)
+	} else {
+		a = re.ReplaceAllLiteralString(a, "")
+		b = re.ReplaceAllLiteralString(b, "")
+	}
+	return a == b
+}
+
+func recoverDomError(code HLDOM_RESULT) {
+	if err := recover(); err == nil {
+		log.Panic("Expected a DomError but got no error")
+	} else if de, ok := err.(DomError); !ok {
+		log.Panic("Expected DomError, instead got: ", err)
+	} else if de.Result != code {
+		log.Panicf("Expected DomError with code %s, but got code %s instead ", domResultAsString(code), domResultAsString(de.Result))
+	}
+}
+
 func testWithHtml(html string, test func(hwnd uint32)) {
 	if !registeredClasses["html"] {
 		m := make(MsgHandlerMap, 32)
@@ -249,9 +269,6 @@ func testWithHtml(html string, test func(hwnd uint32)) {
 	_ = createWindow("html")
 	pump()
 }
-
-
-
 
 // Variables and types for testing
 
@@ -288,11 +305,12 @@ var defaultHandlerMap = MsgHandlerMap{
 
 // Page templates used for various tests
 var pages = map[string]string{
-	"empty":    ``,
-	"page":     `<html><body></body></html>`,
-	"one-div":  `<div id="a">a</div>`,
-	"two-divs": `<div id="a">a</div><div id="b">b</div>`,
-	"nested-divs": `<div id="a">a<div id="b">b</div></div>`,
+	"empty":       ``,
+	"page":        `<html><body></body></html>`,
+	"one-div":     `<div id="a"></div>`,
+	"two-divs":    `<div id="a"></div><div id="b"></div>`,
+	"three-divs":    `<div id="a"></div><div id="b"></div><div id="c"></div>`,
+	"nested-divs": `<div id="a"><div id="b"></div></div>`,
 }
 
 // Notify handler deals with WM_NOTIFY messages sent by htmlayout
@@ -300,10 +318,6 @@ var notifyHandler = &NotifyHandler{}
 
 // Window event handler gets first and last chance to process events
 var windowEventHandler = &EventHandler{}
-
-
-
-
 
 // Tests:
 
@@ -315,7 +329,7 @@ func TestBasicWindow(t *testing.T) {
 	go func() {
 		PostMessage(<-created, WM_CLOSE, 0, 0)
 	}()
-	
+
 	if !registeredClasses["basic"] {
 		// Setup the window message handlers
 		// Customize the WM_CREATE handler so that sends the hwnd to our channel
@@ -425,7 +439,7 @@ func TestParent(t *testing.T) {
 		root := RootElement(hwnd)
 		d1 := root.Child(0)
 		d2 := d1.Child(0)
-		
+
 		if !d2.Parent().Equals(d1) {
 			t.Fatal("Parent was not the expected elem")
 		}
@@ -445,7 +459,8 @@ func TestSelect(t *testing.T) {
 		if len(results) != 1 {
 			t.Fatal("Expected one result")
 		}
-		if !results[0].Equals(root.Child(0).Child(0)) {
+		inner := root.Child(0).Child(0)
+		if !results[0].Equals(inner) {
 			t.Fatal("Expected to match inner div")
 		}
 	})
@@ -463,20 +478,22 @@ func TestSelectParent(t *testing.T) {
 func TestSelectParentLimit(t *testing.T) {
 	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
 		root := RootElement(hwnd)
+		d1 := root.Child(0)
+		d2 := d1.Child(0)
 
-		// Depth=0 means search all the way up to root
-		if result := root.SelectParentLimit("*:has-child-of-type(div):has-child-of-type(div)", 0); !result.Equals(root) {
+		// Depth=0 means search all the way up to root, should match
+		if result := d2.SelectParentLimit("html", 0); result == nil || !result.Equals(root) {
 			t.Fatal("Expected to match root elem")
 		}
 
 		// Depth=1 means only consider receiver element, should not match
-		if result := root.SelectParentLimit("*:has-child-of-type(div)", 1); result != nil {
-			t.Fatal("Expected to only check current element, and not match it")
+		if result := d2.SelectParentLimit("*:has-child-of-type(div)", 1); result != nil {
+			t.Fatal("Expected to only check current element and not match it, instead got: ", result.OuterHtml())
 		}
 
 		// Depth=2 means consider first parent, should match
-		if result := root.SelectParentLimit("*:has-child-of-type(div)", 2); !result.Equals(root.Child(0)) {
-			t.Fatal("Expected to match outer div")
+		if result := d2.SelectParentLimit("*:has-child-of-type(div)", 2); result == nil || !result.Equals(root.Child(0)) {
+			t.Fatal("Expected to match outer div, instead got: ", result.OuterHtml())
 		}
 	})
 }
@@ -484,8 +501,13 @@ func TestSelectParentLimit(t *testing.T) {
 func TestType(t *testing.T) {
 	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
 		root := RootElement(hwnd)
-		if root.Type() != "asdf" {
-			t.Fatal("Type of root elem should be empty string")
+		elemType := root.Type()
+		if elemType != "html" {
+			t.Fatal("Type of root elem should be 'html', instead got: ", elemType)
+		}
+		elemType = root.Child(0).Type()
+		if elemType != "div" {
+			t.Fatal("Type of first child elem should be 'div', instead got: ", elemType)
 		}
 	})
 }
@@ -493,18 +515,9 @@ func TestType(t *testing.T) {
 func TestOuterHtml(t *testing.T) {
 	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
 		root := RootElement(hwnd)
-		if root.OuterHtml() != pages["nested-divs"] {
-			t.Fatal("Outer html of root elem should match original html")
-		}
-
-		d1 := root.Child(0)
-		if d1.OuterHtml() != pages["nested-divs"] {
-			t.Fatal("Outer html of first elem should match original html")
-		}
-
-		d2 := d1.Child(0)
-		if d2.OuterHtml() != `<div id="b">b</div>` {
-			t.Fatal("Outer html of innermost div should be the div itself")
+		expected := "<html>"+pages["nested-divs"]+"</html>"
+		if !equalWithoutWhitespace(expected, root.OuterHtml()) {
+			t.Fatal("Outer html of root elem not as expected")
 		}
 	})
 }
@@ -512,21 +525,230 @@ func TestOuterHtml(t *testing.T) {
 func TestHtml(t *testing.T) {
 	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
 		root := RootElement(hwnd)
-		if root.Html() != pages["nested-divs"] {
+		if !equalWithoutWhitespace(root.Html(), pages["nested-divs"]) {
 			t.Fatal("Inner html of root elem should match original html")
 		}
 
 		d1 := root.Child(0)
-		if d1.Html() != `<div id="b">b</div>` {
+		if !equalWithoutWhitespace(d1.Html(), `<div id="b"></div>`) {
 			t.Fatal("Inner html of first div should match html of innermost div")
 		}
 
 		d2 := d1.Child(0)
-		if d2.Html() != `b` {
+		if !equalWithoutWhitespace(d2.Html(), ``) {
 			t.Fatal("Inner html of innermost div be the div's contents")
 		}
 	})
 }
 
+func TestInsertChild(t *testing.T) {
+	testWithHtml(pages["one-div"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d := root.Child(0)
+		e := NewElement("div")
+		d.InsertChild(e, 0)
+		if !equalWithoutWhitespace(d.Html(), `<div></div>`) {
+			t.Fatal("Inserting element created unexpected html: ", d.Html())
+		}
+		e = NewElement("span")
+		d.InsertChild(e, 0)
+		if !equalWithoutWhitespace(d.Html(), `<span></span><div></div>`) {
+			t.Fatal("Inserting element created unexpected html: ", d.Html())
+		}
+	})
+}
 
+func TestAppendChild(t *testing.T) {
+	testWithHtml(pages["one-div"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d := root.Child(0)
+		e := NewElement("div")
+		d.AppendChild(e)
+		if !equalWithoutWhitespace(d.Html(), `<div></div>`) {
+			t.Fatal("Inserting element created unexpected html: ", d.Html())
+		}
+		e = NewElement("span")
+		d.AppendChild(e)
+		if !equalWithoutWhitespace(d.Html(), `<div></div><span></span>`) {
+			t.Fatal("Inserting element created unexpected html: ", d.Html())
+		}
+	})
+}
 
+func TestDetach(t *testing.T) {
+	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d := root.Child(0)
+		inner := d.Child(0)
+		
+		// Pull the inner div out of the dom
+		inner.Detach()
+		if !equalWithoutWhitespace(d.Html(), ``) {
+			t.Fatal("Element should not have any contents after detaching its only child")
+		}
+
+		// Put it back in
+		d.AppendChild(inner)
+		if !equalWithoutWhitespace(d.Html(), inner.OuterHtml()) {
+			t.Fatal("Element should not have any contents after detaching its only child")
+		}
+	})
+}
+
+func TestDelete(t *testing.T) {
+	testWithHtml(pages["nested-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d := root.Child(0)
+		inner := d.Child(0)
+		
+		inner.Delete()
+		if !equalWithoutWhitespace(d.Html(), ``) {
+			t.Fatal("Element should not have any contents after detaching its only child")
+		}
+
+		// Should not be able to put the deleted element back in, should get invalid handle error
+		func() {
+			defer recoverDomError(HLDOM_INVALID_HANDLE)
+			d.AppendChild(inner)
+		}()
+	})
+}
+
+func TestClone(t *testing.T) {
+	testWithHtml(`<div>a</div>`, func(hwnd uint32) {
+		root := RootElement(hwnd)
+		clone := root.Child(0).Clone()
+		if clone.Type() != "div" {
+			t.Fatal("Clone should have same type as original")
+		}
+		if !equalWithoutWhitespace(clone.Html(), `a`) {
+			t.Fatal("Clone should have same contents as original")
+		}
+	})
+}
+
+func TestSwap(t *testing.T) {
+	testWithHtml(pages["two-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		a := root.Child(0)
+		b := root.Child(1)
+		a.Swap(b)
+		if !equalWithoutWhitespace(root.Html(), `<div id="b"></div><div id="a"></div>`) {
+			t.Fatal("Clone should have same contents as original")
+		}
+	})
+}
+
+func TestSortChildren(t *testing.T) {
+	cmp := func(a, b *Element) int {
+		first := a.Html()[0]
+		second := b.Html()[0]
+		if first == second {
+			return 0
+		} else if first > second {
+			return 1
+		}
+		return -1
+	}
+	testWithHtml(`<div>c</div><div>b</div><div>a</div>`, func(hwnd uint32) {
+		root := RootElement(hwnd)
+		root.SortChildren(cmp)
+		if !equalWithoutWhitespace(root.Html(), `<div>a</div><div>b</div><div>c</div>`) {
+			t.Fatal("Sorted elements should be in alphabetically descending order")
+		}
+	})
+}
+
+func TestSortChildrenRange(t *testing.T) {
+	cmp := func(a, b *Element) int {
+		first := a.Html()[0]
+		second := b.Html()[0]
+		if first == second {
+			return 0
+		} else if first > second {
+			return 1
+		}
+		return -1
+	}
+	testWithHtml(`<div>c</div><div>b</div><div>a</div>`, func(hwnd uint32) {
+		root := RootElement(hwnd)
+		root.SortChildrenRange(0, 2, cmp)
+		if !equalWithoutWhitespace(root.Html(), `<div>b</div><div>c</div><div>a</div>`) {
+			t.Fatal("First two elements should be in alphabetically descending order")
+		}
+	})
+}
+
+func TestHwnd(t *testing.T) {
+	testWithHtml(pages["one-div"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		if root.Hwnd() != hwnd {
+			t.Fatal("Root should report the same hwnd it was created with")
+		}
+		if root.Child(0).Hwnd() != hwnd {
+			t.Fatal("Child should report same hwnd as its root")
+		}
+	})
+}
+
+// TODO: Figure out how this test should differ from the test for Hwnd()
+func TestRootHwnd(t *testing.T) {
+	testWithHtml(pages["one-div"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		if root.RootHwnd() != hwnd {
+			t.Fatal("Root should report the same root hwnd it was created with")
+		}
+		if root.Child(0).RootHwnd() != hwnd {
+			t.Fatal("Child should report same root hwnd as its root")
+		}
+	})
+}
+
+func TestSetHtml(t *testing.T) {
+	d := NewElement("div")
+
+	// Should not be able to set html on an element that is not part of a dom
+	func() {
+		defer recoverDomError(HLDOM_PASSIVE_HANDLE)
+		d.SetHtml("<span></span>")
+	}()
+	
+	testWithHtml(pages["one-div"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d := root.Child(0)
+		d.SetHtml("<span></span>")
+		if !equalWithoutWhitespace(d.Html(), `<span></span>`) {
+			t.Fatal("Element should contain new html")
+		}
+	})
+}
+
+func TestPrependHtml(t *testing.T) {
+	testWithHtml(pages["one-div"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		root.PrependHtml("<span></span>")
+		if !equalWithoutWhitespace(root.Html(), `<span></span><div id="a"></div>`) {
+			t.Fatal("Expected prepended html in front of existing contents")
+		}
+	})
+}
+
+func TestAppendHtml(t *testing.T) {
+	testWithHtml(pages["one-div"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		root.AppendHtml("<span></span>")
+		if !equalWithoutWhitespace(root.Html(), `<div id="a"></div><span></span>`) {
+			t.Fatal("Expected appended html at the end of existing contents")
+		}
+	})
+}
+
+func TestSetText(t *testing.T) {
+	testWithHtml(pages["one-div"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		root.SetText("Hi")
+		if !equalWithoutWhitespace(root.Html(), `Hi`) {
+			t.Fatal("Setting the text should have replaced inner html")
+		}
+	})
+}

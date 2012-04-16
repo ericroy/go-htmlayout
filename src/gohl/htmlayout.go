@@ -12,8 +12,8 @@ import "C"
 import (
 	"errors"
 	"log"
-	"unsafe"
 	"syscall"
+	"unsafe"
 )
 
 const (
@@ -311,6 +311,7 @@ var (
 )
 
 type HELEMENT C.HELEMENT
+type HLDOM_RESULT C.HLDOM_RESULT
 
 type Point struct {
 	X int32
@@ -482,7 +483,7 @@ type NmhlAttachBehavior struct {
 }
 
 // Main event handler that dispatches to the right element handler
-var goElementProc = syscall.NewCallback(func (tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Pointer) C.BOOL {
+var goElementProc = syscall.NewCallback(func(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Pointer) C.BOOL {
 	key := uintptr(tag)
 
 	var handler *EventHandler
@@ -575,7 +576,7 @@ var goElementProc = syscall.NewCallback(func (tag uintptr, he unsafe.Pointer, ev
 	return C.FALSE
 })
 
-var goNotifyProc = syscall.NewCallback(func (msg uint32, wparam uintptr, lparam uintptr, vparam uintptr) uintptr {
+var goNotifyProc = syscall.NewCallback(func(msg uint32, wparam uintptr, lparam uintptr, vparam uintptr) uintptr {
 	if handler, exists := notifyHandlers[vparam]; exists {
 		phdr := (*C.NMHDR)(unsafe.Pointer(lparam))
 
@@ -608,7 +609,7 @@ var goNotifyProc = syscall.NewCallback(func (msg uint32, wparam uintptr, lparam 
 			params := (*NmhlAttachBehavior)(unsafe.Pointer(lparam))
 			key := C.GoString(params.BehaviorName)
 			if constructor, exists := handler.Behaviors[key]; exists {
-				NewElement(params.Element).AttachHandler(constructor())
+				NewElementFromHandle(params.Element).AttachHandler(constructor())
 			} else {
 				log.Print("No such behavior: ", key)
 			}
@@ -617,15 +618,16 @@ var goNotifyProc = syscall.NewCallback(func (msg uint32, wparam uintptr, lparam 
 	return 0
 })
 
-var goSelectCallback = syscall.NewCallback(func (he unsafe.Pointer, param uintptr) uintptr {
+var goSelectCallback = syscall.NewCallback(func(he unsafe.Pointer, param uintptr) uintptr {
 	slice := (*[]*Element)(unsafe.Pointer(param))
-	*slice = append(*slice, NewElement(HELEMENT(he)))
+	e := NewElementFromHandle(HELEMENT(he))
+	*slice = append(*slice, e)
 	return 0
 })
 
-var goElementComparator = syscall.NewCallback(func (he1 unsafe.Pointer, he2 unsafe.Pointer, arg uintptr) int {
+var goElementComparator = syscall.NewCallback(func(he1 unsafe.Pointer, he2 unsafe.Pointer, arg uintptr) int {
 	cmp := *(*func(*Element, *Element) int)(unsafe.Pointer(arg))
-	return cmp(NewElement(HELEMENT(he1)), NewElement(HELEMENT(he2)))
+	return cmp(NewElementFromHandle(HELEMENT(he1)), NewElementFromHandle(HELEMENT(he2)))
 })
 
 // Main htmlayout wndproc
