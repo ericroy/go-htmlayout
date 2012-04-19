@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"unicode/utf16"
 	"unsafe"
+	"regexp"
 )
 
 const (
@@ -39,6 +40,14 @@ var errorToString = map[HLDOM_RESULT]string{
 	HLDOM_OPERATION_FAILED:  "HLDOM_OPERATION_FAILED",
 	HLDOM_OK_NOT_HANDLED:    "HLDOM_OK_NOT_HANDLED",
 }
+
+var cssNumberPattern = func() *regexp.Regexp {
+	re, err := regexp.Compile(`^([\d-.]*)(?:[^\d-.].*)*`)
+	if err != nil {
+		panic(err)
+	}
+	return re
+}()
 
 // DomError represents an htmlayout error with an associated
 // dom error code
@@ -126,7 +135,7 @@ func NewElement(tagName string) *Element {
 	var handle HELEMENT = BAD_HELEMENT
 	szName := C.CString(tagName)
 	defer C.free(unsafe.Pointer(szName))
-	if ret := C.HTMLayoutCreateElement((*C.CHAR)(szName), nil,  (*C.HELEMENT)(&handle)); ret != HLDOM_OK {
+	if ret := C.HTMLayoutCreateElement((*C.CHAR)(szName), nil, (*C.HELEMENT)(&handle)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to create new element")
 	}
 	return NewElementFromHandle(handle)
@@ -480,13 +489,13 @@ func (e *Element) Attr(key string) *string {
 	return nil
 }
 
-func (e *Element) AttrAsFloat(key string) *float32 {
+func (e *Element) AttrAsFloat(key string) *float64 {
 	if s := e.Attr(key); s != nil {
-		if f, err := strconv.ParseFloat(*s, 32); err != nil {
+		if f, err := strconv.ParseFloat(*s, 64); err != nil {
 			panic(err)
 		} else {
-			f32 := float32(f)
-			return &f32
+			f64 := float64(f)
+			return &f64
 		}
 	}
 	return nil
@@ -512,6 +521,8 @@ func (e *Element) SetAttr(key string, value interface{}) {
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(v)))
 	case float32:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'e', -1, 32))))
+	case float64:
+		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'e', -1, 64))))
 	case int:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Itoa(v))))
 	case nil:
@@ -528,23 +539,16 @@ func (e *Element) RemoveAttr(key string) {
 	e.SetAttr(key, nil)
 }
 
-func (e *Element) AttrValueByIndex(index uint) string {
+func (e *Element) AttrByIndex(index int) (string, string) {
 	szValue := (*C.WCHAR)(nil)
-	if ret := C.HTMLayoutGetNthAttribute(e.handle, C.UINT(index), nil, (*C.LPCWSTR)(&szValue)); ret != HLDOM_OK {
-		domPanic(ret, fmt.Sprintf("Failed to get attribute name by index: %u", index))
-	}
-	return utf16ToString((*uint16)(szValue))
-}
-
-func (e *Element) AttrNameByIndex(index uint) string {
 	szName := (*C.CHAR)(nil)
-	if ret := C.HTMLayoutGetNthAttribute(e.handle, C.UINT(index), (*C.LPCSTR)(&szName), nil); ret != HLDOM_OK {
-		domPanic(ret, fmt.Sprintf("Failed to get attribute name by index: %u", index))
+	if ret := C.HTMLayoutGetNthAttribute(e.handle, C.UINT(index), (*C.LPCSTR)(&szName), (*C.LPCWSTR)(&szValue)); ret != HLDOM_OK {
+		domPanic(ret, fmt.Sprintf("Failed to get attribute by index: %u", index))
 	}
-	return C.GoString((*C.char)(szName))
+	return C.GoString((*C.char)(szName)), utf16ToString((*uint16)(szValue))
 }
 
-func (e *Element) AttrCount(index uint) uint {
+func (e *Element) AttrCount() uint {
 	var count C.UINT = 0
 	if ret := C.HTMLayoutGetAttributeCount(e.handle, &count); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get attribute count")
@@ -568,13 +572,17 @@ func (e *Element) Style(key string) *string {
 	return nil
 }
 
-func (e *Element) StyleAsFloat(key string) *float32 {
+func (e *Element) StyleAsFloat(key string) *float64 {
 	if s := e.Style(key); s != nil {
-		if f, err := strconv.ParseFloat(*s, 32); err != nil {
-			panic(err)
+		if match := cssNumberPattern.Find([]byte(*s)); match == nil {
+			panic(fmt.Sprint("Could not get number part of css value: ", *s))
 		} else {
-			f32 := float32(f)
-			return &f32
+			if f, err := strconv.ParseFloat(string(match), 64); err != nil {
+				panic(err)
+			} else {
+				f64 := float64(f)
+				return &f64
+			}
 		}
 	}
 	return nil
@@ -582,10 +590,14 @@ func (e *Element) StyleAsFloat(key string) *float32 {
 
 func (e *Element) StyleAsInt(key string) *int {
 	if s := e.Style(key); s != nil {
-		if i, err := strconv.Atoi(*s); err != nil {
-			panic(err)
+		if match := cssNumberPattern.Find([]byte(*s)); match == nil {
+			panic(fmt.Sprint("Could not get number part of css value: ", *s))
 		} else {
-			return &i
+			if i, err := strconv.Atoi(string(match)); err != nil {
+				panic(err)
+			} else {
+				return &i
+			}
 		}
 	}
 	return nil
