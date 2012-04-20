@@ -792,24 +792,27 @@ func TestAttr(t *testing.T) {
 	testWithHtml(pages["attr"], func(hwnd uint32) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
-		first := d.Attr("first")
-		second := d.Attr("second")
-		third := d.Attr("third")
-		invalid := d.Attr("invalid")
-		if first == nil || second == nil || third == nil {
-			t.Fatal("Should have gotten attr value as string but didn't")
+
+		if first, err := d.Attr("first"); err != nil {
+			t.Fatal(err)
+		} else if first != "5" {
+			t.Fatal("Unexpected value: ", first)
 		}
-		if invalid != nil {
-			t.Fatal("Should have gotten nil for key 'invalid'")
+		
+		if second, err := d.Attr("second"); err != nil {
+			t.Fatal(err)
+		} else if second != "5.1" {
+			t.Fatal("Unexpected value: ", second)
 		}
-		if *first != "5" {
-			t.Fatal("Wrong value for attr 'first'")
+
+		if third, err := d.Attr("third"); err != nil {
+			t.Fatal(err)
+		} else if third != "yes" {
+			t.Fatal("Unexpected value: ", third)
 		}
-		if *second != "5.1" {
-			t.Fatal("Wrong value for attr 'second'")
-		}
-		if *third != "yes" {
-			t.Fatal("Wrong value for attr 'third'")
+
+		if _, err := d.Attr("invalid"); err == nil {
+			t.Fatal("Expected error")
 		}
 	})
 }
@@ -819,8 +822,10 @@ func TestAttrAsFloatOnInt(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if math.Abs(*d.AttrAsFloat("first") - float64(5.0)) > float64(0.0001) {
-			t.Fatal("Expected floating point 5")
+		if value, err := d.AttrAsFloat("first"); err != nil {
+			t.Fatal(err)
+		} else if math.Abs(value - float64(5.0)) > float64(0.0001) {
+			t.Fatal("Unexpected value: ", value)
 		}
 	})
 }
@@ -830,8 +835,10 @@ func TestAttrAsFloatOnFloat(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if math.Abs(*d.AttrAsFloat("second") - float64(5.1)) > float64(0.0001) {
-			t.Fatal("Expected floating point 5.1")
+		if value, err := d.AttrAsFloat("second"); err != nil {
+			t.Fatal(err)
+		} else if math.Abs(value - float64(5.1)) > float64(0.0001) {
+			t.Fatal("Unexpected value: ", value)
 		}
 	})
 }
@@ -841,10 +848,11 @@ func TestAttrAsFloatOnString(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		func() {
-			defer expectPanic()
-			d.AttrAsFloat("third")
-		}()
+		if _, err := d.AttrAsFloat("third"); err == nil {
+			t.Fatal("Expected error")
+		} else if _, ok := err.(*strconv.NumError); !ok {
+			t.Fatal("Expected NumError")
+		}
 	})
 }
 
@@ -853,8 +861,10 @@ func TestAttrAsFloatOnInvalid(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if d.AttrAsFloat("invalid") != nil {
-			t.Fatal("Should have gotten nil for invalid attr")
+		if _, err := d.AttrAsFloat("invalid"); err == nil {
+			t.Fatal("Expected error")
+		} else if _, ok := err.(*DoesNotExistError); !ok {
+			t.Fatal("Expected DoesNotExistError")
 		}
 	})
 }
@@ -864,8 +874,10 @@ func TestAttrAsIntOnInt(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if *d.AttrAsInt("first") != 5 {
-			t.Fatal("Expected floating point 5")
+		if value, err := d.AttrAsInt("first"); err != nil {
+			t.Fatal(err)
+		} else if value != 5 {
+			t.Fatal("Expected integer 5")
 		}
 	})
 }
@@ -875,10 +887,11 @@ func TestAttrAsIntOnFloat(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		func() {
-			defer expectPanic()
-			d.AttrAsInt("second")
-		}()
+		if _, err := d.AttrAsInt("second"); err == nil {
+			t.Fatal("Expected error while parsing")
+		} else if _, ok := err.(*strconv.NumError); !ok {
+			t.Fatal("Expected NumError")
+		}
 	})
 }
 
@@ -887,10 +900,11 @@ func TestAttrAsIntOnString(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		func() {
-			defer expectPanic()
-			d.AttrAsInt("third")
-		}()
+		if _, err := d.AttrAsInt("third"); err == nil {
+			t.Fatal("Expected error while parsing")
+		} else if _, ok := err.(*strconv.NumError); !ok {
+			t.Fatal("Expected NumError")
+		}
 	})
 }
 
@@ -899,8 +913,10 @@ func TestAttrAsIntOnInvalid(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if d.AttrAsInt("invalid") != nil {
-			t.Fatal("Should have gotten nil for invalid attr")
+		if _, err := d.AttrAsFloat("invalid"); err == nil {
+			t.Fatal("Expected error")
+		} else if _, ok := err.(*DoesNotExistError); !ok {
+			t.Fatal("Expected DoesNotExistError")
 		}
 	})
 }
@@ -909,16 +925,14 @@ func TestRemoveAttr(t *testing.T) {
 	testWithHtml(pages["attr"], func(hwnd uint32) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
-		second := d.Attr("second")
-		if second == nil {
+		if _, err := d.Attr("second"); err != nil {
 			t.Fatal("Should have gotten attr for key 'second'")
+		} else {
+			d.RemoveAttr("second")
+			if _, err := d.Attr("second"); err == nil {
+				t.Fatal("Expected error")
+			}
 		}
-		d.RemoveAttr("second")
-		second = d.Attr("second")
-		if second != nil {
-			t.Fatal("Attr should be nil after removal")
-		}
-
 		// Removing a nonexistent attr should do nothing
 		d.RemoveAttr("invalid")
 	})
@@ -931,14 +945,12 @@ func TestSetAttrFloat32(t *testing.T) {
 		pi := 3.14159
 		d.SetAttr("myFloat32", float32(pi))
 
-		if s := d.Attr("myFloat32"); s == nil {
+		if s, err := d.Attr("myFloat32"); err != nil {
 			t.Fatal("Failed to add attr as float32")
-		} else {
-			if f, err := strconv.ParseFloat(*s, 64); err != nil {
-				t.Fatal("Could not parse attr string as float")
-			} else if math.Abs(f - float64(pi)) > float64(0.0001) {
-				t.Fatal("Attr retrieved was not equal to the attr set")
-			}	
+		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
+			t.Fatal(err)
+		} else if math.Abs(f - float64(pi)) > float64(0.0001) {
+			t.Fatal("Unexpected value: ", f)
 		}
 	})
 }
@@ -950,14 +962,12 @@ func TestSetAttrFloat64(t *testing.T) {
 		pi := 3.14159
 		d.SetAttr("myFloat64", float64(pi))
 
-		if s := d.Attr("myFloat64"); s == nil {
-			t.Fatal("Failed to add attr as float64")
-		} else {
-			if f, err := strconv.ParseFloat(*s, 64); err != nil {
-				t.Fatal("Could not parse attr string as float")
-			} else if math.Abs(f - float64(pi)) > float64(0.0001) {
-				t.Fatal("Attr retrieved was not equal to the attr set")
-			}	
+		if s, err := d.Attr("myFloat64"); err != nil {
+			t.Fatal(err)
+		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
+			t.Fatal("Could not parse attr string as float")
+		} else if math.Abs(f - float64(pi)) > float64(0.0001) {
+			t.Fatal("Unexpected value: ", f)
 		}
 	})
 }
@@ -968,10 +978,10 @@ func TestSetAttrString(t *testing.T) {
 		d := root.Child(0)
 		d.SetAttr("myString", "hello")
 
-		if s := d.Attr("myString"); s == nil {
-			t.Fatal("Failed to add attr as string")
-		} else if *s != "hello" {
-			t.Fatal("Attr retrieved was not equal to the attr set")
+		if s, err := d.Attr("myString"); err != nil {
+			t.Fatal(err)
+		} else if s != "hello" {
+			t.Fatal("Unexpected value: ", s)
 		}
 	})
 }
@@ -982,10 +992,10 @@ func TestSetAttrInt(t *testing.T) {
 		d := root.Child(0)
 		d.SetAttr("myInt", 9)
 
-		if s := d.Attr("myInt"); s == nil {
-			t.Fatal("Failed to add attr as int")
-		} else if *s != "9" {
-			t.Fatal("Attr retrieved was not equal to the attr set")
+		if s, err := d.Attr("myInt"); err != nil {
+			t.Fatal(err)
+		} else if s != "9" {
+			t.Fatal("Unexpected value: ", s)
 		}
 	})
 }
@@ -997,7 +1007,9 @@ func TestSetAttrOverwrite(t *testing.T) {
 
 		// Test overwriting an attr that already exists
 		d.SetAttr("id", "hai")
-		if s := d.Attr("id"); *s != "hai" {
+		if s, err := d.Attr("id"); err != nil {
+			t.Fatal(err)
+		} else if s != "hai" {
 			t.Fatal("Expected to overwrite attr")
 		}
 	})
@@ -1008,30 +1020,28 @@ func TestStyle(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 		
-		if s := d.Style("left"); s == nil {
-			t.Fatal("Expected style for 'left', got nil")
-		} else if *s != "10px" {
+		if s, err := d.Style("left"); err != nil {
+			t.Fatal(err)
+		} else if s != "10px" {
 			t.Fatal("Unexpected value for style 'left'")
 		}
 
-		if s := d.Style("opacity"); s == nil {
-			t.Fatal("Expected style for 'opacity', got nil")
-		} else {
-			if f, err := strconv.ParseFloat(*s, 64); err != nil {
-				t.Fatal("Could not parse style string as float")
-			} else if math.Abs(f - float64(0.5)) > float64(0.05) {
-				t.Fatal("Unexpected value for style 'opacity': ", *s)
-			}
+		if s, err := d.Style("opacity"); err != nil {
+			t.Fatal(err)
+		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
+			t.Fatal(err)
+		} else if math.Abs(f - float64(0.5)) > float64(0.05) {
+			t.Fatal("Unexpected value: ", s)
 		}
 
-		if s := d.Style("text-align"); s == nil {
-			t.Fatal("Expected style for 'text-align', got nil")
-		} else if *s != "center" {
-			t.Fatal("Unexpected value for style 'text-align'")
+		if s, err := d.Style("text-align"); err != nil {
+			t.Fatal(err)
+		} else if s != "center" {
+			t.Fatal("Unexpected value: ", s)
 		}
 
-		if d.Style("invalid") != nil {
-			t.Fatal("Expected nonexistent style to return nil")
+		if _, err := d.Style("invalid"); err == nil {
+			t.Fatal("Expected error for nonexistent style")
 		}
 	})
 }
@@ -1041,10 +1051,10 @@ func TestStyleAsFloatOnInt(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 		
-		if s := d.StyleAsFloat("left"); s == nil {
-			t.Fatal("Expected style for 'left', got nil")
-		} else if math.Abs(*s - float64(10)) > float64(0.0001) {
-			t.Fatal("Unexpected value for style 'left'")
+		if f, err := d.StyleAsFloat("left"); err != nil {
+			t.Fatal(err)
+		} else if math.Abs(f - float64(10)) > float64(0.0001) {
+			t.Fatal("Unexpected value: ", f)
 		}
 	})
 }
@@ -1054,10 +1064,10 @@ func TestStyleAsFloatOnFloat(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if s := d.StyleAsFloat("opacity"); s == nil {
-			t.Fatal("Expected style for 'opacity', got nil")
-		} else if math.Abs(*s - float64(0.5)) > float64(0.0001) {
-			t.Fatal("Unexpected value for style 'opacity'")
+		if f, err := d.StyleAsFloat("opacity"); err != nil {
+			t.Fatal(err)
+		} else if math.Abs(f - float64(0.5)) > float64(0.01) {
+			t.Fatal("Unexpected value: ", f)
 		}
 	})
 }
@@ -1067,10 +1077,9 @@ func TestStyleAsFloatOnString(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		func() {
-			defer expectPanic()
-			d.StyleAsFloat("text-align");
-		}()
+		if _, err := d.StyleAsFloat("text-align"); err == nil {
+			t.Fatal("Expected error")
+		}
 	})
 }
 
@@ -1079,8 +1088,8 @@ func TestStyleAsFloatOnInvalid(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if d.StyleAsFloat("invalid") != nil {
-			t.Fatal("Expected nonexistent style to return nil")
+		if _, err := d.StyleAsFloat("invalid"); err == nil {
+			t.Fatal("Expected error")
 		}
 	})
 }
@@ -1090,10 +1099,10 @@ func TestStyleAsIntOnInt(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 		
-		if s := d.StyleAsInt("left"); s == nil {
-			t.Fatal("Expected style for 'left', got nil")
-		} else if *s != 10 {
-			t.Fatal("Unexpected value for style 'left'")
+		if i, err := d.StyleAsInt("left"); err != nil {
+			t.Fatal(err)
+		} else if i != 10 {
+			t.Fatal("Unexpected value: ", i)
 		}
 	})
 }
@@ -1103,10 +1112,9 @@ func TestStyleAsIntOnFloat(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 		
-		func() {
-			defer expectPanic()
-			d.StyleAsInt("opacity");
-		}()
+		if _, err := d.StyleAsInt("opacity"); err == nil {
+			t.Fatal("Expected error")
+		}
 	})
 }
 
@@ -1115,10 +1123,9 @@ func TestStyleAsIntOnString(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		func() {
-			defer expectPanic()
-			d.StyleAsFloat("text-align");
-		}()
+		if _, err := d.StyleAsFloat("text-align"); err == nil {
+			t.Fatal("Expected error")
+		}
 	})
 }
 
@@ -1127,8 +1134,8 @@ func TestStyleAsIntOnInvalid(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if d.StyleAsInt("invalid") != nil {
-			t.Fatal("Expected nonexistent style to return nil")
+		if _, err := d.StyleAsInt("invalid"); err == nil {
+			t.Fatal("Expected error")
 		}
 	})
 }
@@ -1137,17 +1144,14 @@ func TestSetStyleFloat32(t *testing.T) {
 	testWithHtml(pages["css"], func(hwnd uint32) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
-		pi := 3.14159
 
-		d.SetStyle("myFloat32", float32(pi))
-		if s := d.Style("myFloat32"); s == nil {
-			t.Fatal("Failed to add style as float32")
-		} else {
-			if f, err := strconv.ParseFloat(*s, 64); err != nil {
-				t.Fatal("Could not parse style string as float")
-			} else if math.Abs(f - float64(pi)) > float64(0.0001) {
-				t.Fatal("Unexpected value for style 'myFloat32': ", *s)
-			}	
+		d.SetStyle("opacity", float32(0.75))
+		if s, err := d.Style("opacity"); err != nil {
+			t.Fatal(err)
+		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
+			t.Fatal(err)
+		} else if math.Abs(f - float64(0.75)) > float64(0.01) {
+			t.Fatal("Unexpected value: ", s)
 		}
 	})
 }
@@ -1156,17 +1160,14 @@ func TestSetStyleFloat64(t *testing.T) {
 	testWithHtml(pages["css"], func(hwnd uint32) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
-		pi := 3.14159
 
-		d.SetStyle("myFloat64", float64(pi))
-		if s := d.Style("myFloat64"); s == nil {
-			t.Fatal("Failed to add style as float64")
-		} else {
-			if f, err := strconv.ParseFloat(*s, 64); err != nil {
-				t.Fatal("Could not parse style string as float")
-			} else if math.Abs(f - float64(pi)) > float64(0.0001) {
-				t.Fatal("Unexpected value for style 'myFloat64': ", *s)
-			}	
+		d.SetStyle("opacity", float64(0.75))
+		if s, err := d.Style("opacity"); err != nil {
+			t.Fatal(err)
+		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
+			t.Fatal(err)
+		} else if math.Abs(f - float64(0.75)) > float64(0.01) {
+			t.Fatal("Unexpected value: ", s)
 		}
 	})
 }
@@ -1176,11 +1177,11 @@ func TestSetStyleString(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		d.SetStyle("myString", "hello")
-		if s := d.Style("myString"); s == nil {
-			t.Fatal("Failed to add style as string")
-		} else if *s != "hello" {
-			t.Fatal("Unexpected value for style 'myString': ", *s)
+		d.SetStyle("font-family", "hello")
+		if s, err := d.Style("font-family"); err != nil {
+			t.Fatal(err)
+		} else if s != "hello" {
+			t.Fatal("Unexpected value: ", s)
 		}
 	})
 }
@@ -1190,11 +1191,11 @@ func TestSetStyleInt(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		d.SetStyle("myInt", 9)
-		if s := d.Style("myInt"); s == nil {
-			t.Fatal("Failed to add style as int")
-		} else if *s != "9" {
-			t.Fatal("Unexpected value for style 'myInt': ", *s)
+		d.SetStyle("height", 9)
+		if s, err := d.Style("height"); err != nil {
+			t.Fatal(err)
+		} else if s != "9px" {
+			t.Fatal("Unexpected value: ", s)
 		}
 	})
 }
@@ -1206,7 +1207,9 @@ func TestSetStyleOverwrite(t *testing.T) {
 
 		// Test overwriting a style that already exists
 		d.SetStyle("left", 99)
-		if s := d.Style("left"); *s != "99px" {
+		if s, err := d.Style("left"); err != nil {
+			t.Fatal(err)
+		} else if s != "99px" {
 			t.Fatal("Expected to overwrite style")
 		}
 	})
