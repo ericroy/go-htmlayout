@@ -1158,7 +1158,8 @@ func TestSetStyleFloat32(t *testing.T) {
 			t.Fatal("Should exist")
 		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
 			t.Fatal(err)
-		} else if math.Abs(f - float64(0.75)) > float64(0.01) {
+		} else if math.Abs(f - float64(0.75)) > float64(0.05) {
+			log.Print(s)
 			t.Fatal("Unexpected value: ", f)
 		}
 	})
@@ -1174,7 +1175,7 @@ func TestSetStyleFloat64(t *testing.T) {
 			t.Fatal("Should exist")
 		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
 			t.Fatal(err)
-		}  else if math.Abs(f - float64(0.75)) > float64(0.01) {
+		}  else if math.Abs(f - float64(0.75)) > float64(0.05) {
 			t.Fatal("Unexpected value: ", f)
 		}
 	})

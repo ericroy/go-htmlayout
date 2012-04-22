@@ -515,9 +515,9 @@ func (e *Element) SetAttr(key string, value interface{}) {
 	case string:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(v)))
 	case float32:
-		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'e', -1, 64))))
+		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'g', -1, 64))))
 	case float64:
-		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'e', -1, 64))))
+		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'g', -1, 64))))
 	case int:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Itoa(v))))
 	case nil:
@@ -623,9 +623,9 @@ func (e *Element) SetStyle(key string, value interface{}) {
 	case string:
 		valuePtr = stringToUtf16Ptr(v)
 	case float32:
-		valuePtr = stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'e', -1, 64))
+		valuePtr = stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'g', -1, 64))
 	case float64:
-		valuePtr = stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'e', -1, 64))
+		valuePtr = stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'g', -1, 64))
 	case int:
 		valuePtr = stringToUtf16Ptr(strconv.Itoa(v))
 	case nil:
