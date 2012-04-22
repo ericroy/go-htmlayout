@@ -17,6 +17,7 @@ import (
 	"unicode/utf16"
 	"unsafe"
 	"regexp"
+	"strings"
 	"errors"
 )
 
@@ -42,8 +43,18 @@ var errorToString = map[HLDOM_RESULT]string{
 	HLDOM_OK_NOT_HANDLED:    "HLDOM_OK_NOT_HANDLED",
 }
 
+// Allows for an optional hash at the start of the value.  Not sure why,
+// but often this hash is present (even for things that are not colors)
 var cssNumberPattern = func() *regexp.Regexp {
-	re, err := regexp.Compile(`^([\d-.]*)(?:[^\d-.].*)*`)
+	re, err := regexp.Compile(`^#?([\d-.]*)([^\d-.].*)?$`)
+	if err != nil {
+		panic(err)
+	}
+	return re
+}()
+
+var whitespaceSplitter = func() *regexp.Regexp {
+	re, err := regexp.Compile(`(\S+)`)
 	if err != nil {
 		panic(err)
 	}
@@ -62,6 +73,7 @@ func (e *DomError) Error() string {
 }
 
 
+// Returned to caller in situations such as attr not found, style not found, etc
 type DoesNotExistError struct {
 	Message string
 }
@@ -564,6 +576,63 @@ func (e *Element) AttrCount() uint {
 	return uint(count)
 }
 
+func (e *Element) HasClass(class string) bool {
+	if classList, err := e.Attr("class"); err != nil {
+		// If there was an error, it had better be a DoesNotExistError
+		if _, ok := err.(*DoesNotExistError); !ok {
+			panic(err)
+		}
+		return false
+	} else if classes := whitespaceSplitter.FindAllString(classList, -1); classes == nil {
+		return false
+	} else {
+		for _, item := range classes {
+			if class == item {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (e *Element) AddClass(class string) {
+	if classList, err := e.Attr("class"); err != nil {
+		// If there was an error, it had better be a DoesNotExistError
+		if _, ok := err.(*DoesNotExistError); !ok {
+			panic(err)
+		}
+		e.SetAttr("class", class)
+	} else if classes := whitespaceSplitter.FindAllString(classList, -1); classes == nil {
+		e.SetAttr("class", class)
+	} else {
+		for _, item := range classes {
+			if class == item {
+				return
+			}
+		}
+		classes = append(classes, class)
+		e.SetAttr("class", strings.Join(classes, " "))
+	}
+}
+
+func (e *Element) RemoveClass(class string) {
+	if classList, err := e.Attr("class"); err != nil {
+		// If there was an error, it had better be a DoesNotExistError
+		if _, ok := err.(*DoesNotExistError); !ok {
+			panic(err)
+		}
+	} else if classes := whitespaceSplitter.FindAllString(classList, -1); classes != nil {
+		for i, item := range classes {
+			if class == item {
+				// Delete the item from the list
+				classes = append(classes[:i], classes[i+1:]...)
+				e.SetAttr("class", strings.Join(classes, " "))
+				return
+			}
+		}
+	}
+}
+
 // CSS style attribute accessors/mutators
 
 func (e *Element) Style(key string) (string, error) {
@@ -579,49 +648,69 @@ func (e *Element) Style(key string) (string, error) {
 	return "", &DoesNotExistError{Message:fmt.Sprint("No such style: ", key)}
 }
 
-func (e *Element) StyleAsFloat(key string) (float64, error) {
+// Returns number value as a float and the css units of the value as a string
+func (e *Element) StyleAsFloat(key string) (float64, string, error) {
 	var f float64
+	var units string
 	if s, err := e.Style(key); err != nil {
-		return 0.0, err
-	} else if matches := cssNumberPattern.FindStringSubmatch(s); len(matches) < 2 {
-		return 0.0, &strconv.NumError{Func:"StyleAsFloat", Num:s, Err:errors.New("Could not find numeric part")}
+		return 0.0, "", err
+	} else if matches := cssNumberPattern.FindStringSubmatch(s); matches == nil || len(matches) < 2 {
+		return 0.0, "", &strconv.NumError{Func:"StyleAsFloat", Num:s, Err:errors.New("Could not find numeric part")}
 	} else if f, err = strconv.ParseFloat(matches[1], 64); err != nil {
-		return 0.0, err
+		return 0.0, "", err
+	} else {
+		units = ""
+		if len(matches) > 2 {
+			units = matches[2]
+		}
 	}
-	return float64(f), nil
+	return f, units, nil
 }
 
-func (e *Element) StyleAsInt(key string) (int, error) {
+// Returns number value as an integer and the css units of the value as a string
+func (e *Element) StyleAsInt(key string) (int, string, error) {
 	var i int
+	var units string
 	if s, err := e.Style(key); err != nil {
-		return 0, err
-	} else if matches := cssNumberPattern.FindStringSubmatch(s); len(matches) < 2 {
-		return 0, &strconv.NumError{Func:"StyleAsInt", Num:s, Err:errors.New("Could not find numeric part")}
+		return 0.0, "", err
+	} else if matches := cssNumberPattern.FindStringSubmatch(s); matches == nil || len(matches) < 2 {
+		return 0.0, "", &strconv.NumError{Func:"StyleAsInt", Num:s, Err:errors.New("Could not find numeric part")}
 	} else if i, err = strconv.Atoi(matches[1]); err != nil {
-		return 0, err
+		return 0.0, "", err
+	} else {
+		units = ""
+		if len(matches) > 2 {
+			units = matches[2]
+		}
 	}
-	return i, nil
+	return i, units, nil
 }
 
 func (e *Element) SetStyle(key string, value interface{}) {
+	e.SetStyleWithUnits(key, value, "")
+}
+
+func (e *Element) SetStyleWithUnits(key string, value interface{}, units string) {
 	szKey := C.CString(key)
 	defer C.free(unsafe.Pointer(szKey))
-	var ret C.HLDOM_RESULT = HLDOM_OK
+	var valuePtr *uint16 = nil
+	
 	switch v := value.(type) {
 	case string:
-		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(v)))
+		valuePtr = stringToUtf16Ptr(fmt.Sprint(v, units))
 	case float32:
-		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'e', -1, 64))))
+		valuePtr = stringToUtf16Ptr(fmt.Sprint(strconv.FormatFloat(float64(v), 'e', -1, 64), units))
 	case float64:
-		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'e', -1, 64))))
+		valuePtr = stringToUtf16Ptr(fmt.Sprint(strconv.FormatFloat(float64(v), 'e', -1, 64), units))
 	case int:
-		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Itoa(v))))
+		valuePtr = stringToUtf16Ptr(fmt.Sprint(strconv.Itoa(v), units))
 	case nil:
-		ret = C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), nil)
+		valuePtr = nil
 	default:
 		log.Panic("Don't know how to format this argument type")
 	}
-	if ret != HLDOM_OK {
+
+	if ret := C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(valuePtr)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to set style: "+key)
 	}
 }

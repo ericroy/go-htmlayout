@@ -321,6 +321,7 @@ var pages = map[string]string{
 	"nested-divs": `<div id="a"><div id="b"></div></div>`,
 	"attr":        `<div id="a" first="5" second="5.1" third="yes"></div>`,
 	"css":		   `<div style="left:10; opacity:0.5; text-align:center;"></div>`,
+	"classes":	   `<div class="one  two three"></div><div></div>`,
 }
 
 // Notify handler deals with WM_NOTIFY messages sent by htmlayout
@@ -1015,6 +1016,99 @@ func TestSetAttrOverwrite(t *testing.T) {
 	})
 }
 
+func TestHasClass(t *testing.T) {
+	testWithHtml(pages["classes"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d := root.Child(0)
+		d2 := root.Child(1)
+
+		if !d.HasClass("two") {
+			t.Fatal("Should have class 'two'")
+		}
+		if d.HasClass("nope") {
+			t.Fatal("Should not have class 'nope'")
+		}
+		if d2.HasClass("nope") {
+			t.Fatal("Should not have class 'nope'")
+		}
+	})
+}
+
+func TestAddClass(t *testing.T) {
+	testWithHtml(pages["classes"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d := root.Child(0)
+		d2 := root.Child(1)
+
+		var classes string
+		var err error
+		
+		d.AddClass("four")
+		if classes, err = d.Attr("class"); err != nil {
+			panic(err)
+		}
+		if classes != "one two three four" {
+			t.Fatalf("Unexpected class attr value: '%s'", classes)
+		}
+
+		d.AddClass("two")
+		if classes, err = d.Attr("class"); err != nil {
+			panic(err)
+		}
+		if classes != "one two three four" {
+			t.Fatalf("Unexpected class attr value: '%s'", classes)
+		}
+
+		d2.AddClass("one")
+		if classes, err = d2.Attr("class"); err != nil {
+			panic(err)
+		}
+		if classes != "one" {
+			t.Fatalf("Unexpected class attr value: '%s'", classes)
+		}
+	})
+}
+
+func TestRemoveClass(t *testing.T) {
+	testWithHtml(pages["classes"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d := root.Child(0)
+		d2 := root.Child(1)
+
+		var classes string
+		var err error
+
+		d.RemoveClass("one")
+		if classes, err = d.Attr("class"); err != nil {
+			panic(err)
+		}
+		if classes != "two three" {
+			t.Fatalf("Unexpected class attr value: '%s'", classes)
+		}
+
+		d.RemoveClass("three")
+		if classes, err = d.Attr("class"); err != nil {
+			panic(err)
+		}
+		if classes != "two" {
+			t.Fatalf("Unexpected class attr value: '%s'", classes)
+		}
+
+		d.RemoveClass("nope")
+		if classes, err = d.Attr("class"); err != nil {
+			panic(err)
+		}
+		if classes != "two" {
+			t.Fatalf("Unexpected class attr value: '%s'", classes)
+		}
+
+		d2.RemoveClass("nope")
+		if classes, err = d2.Attr("class"); err == nil {
+			t.Fatal("Should not have class attr")
+		}
+	})
+}
+
 func TestStyle(t *testing.T) {
 	testWithHtml(pages["css"], func(hwnd uint32) {
 		root := RootElement(hwnd)
@@ -1051,10 +1145,12 @@ func TestStyleAsFloatOnInt(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 		
-		if f, err := d.StyleAsFloat("left"); err != nil {
+		if f, units, err := d.StyleAsFloat("left"); err != nil {
 			t.Fatal(err)
 		} else if math.Abs(f - float64(10)) > float64(0.0001) {
 			t.Fatal("Unexpected value: ", f)
+		} else if units != "px" {
+			t.Fatal("Unexpected units: ", units)
 		}
 	})
 }
@@ -1064,10 +1160,12 @@ func TestStyleAsFloatOnFloat(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if f, err := d.StyleAsFloat("opacity"); err != nil {
+		if f, units, err := d.StyleAsFloat("opacity"); err != nil {
 			t.Fatal(err)
 		} else if math.Abs(f - float64(0.5)) > float64(0.01) {
 			t.Fatal("Unexpected value: ", f)
+		} else if units != "" {
+			t.Fatal("Expected no units")
 		}
 	})
 }
@@ -1077,7 +1175,7 @@ func TestStyleAsFloatOnString(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if _, err := d.StyleAsFloat("text-align"); err == nil {
+		if _, _, err := d.StyleAsFloat("text-align"); err == nil {
 			t.Fatal("Expected error")
 		}
 	})
@@ -1088,7 +1186,7 @@ func TestStyleAsFloatOnInvalid(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if _, err := d.StyleAsFloat("invalid"); err == nil {
+		if _, _, err := d.StyleAsFloat("invalid"); err == nil {
 			t.Fatal("Expected error")
 		}
 	})
@@ -1099,10 +1197,12 @@ func TestStyleAsIntOnInt(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 		
-		if i, err := d.StyleAsInt("left"); err != nil {
+		if i, units, err := d.StyleAsInt("left"); err != nil {
 			t.Fatal(err)
 		} else if i != 10 {
 			t.Fatal("Unexpected value: ", i)
+		} else if units != "px" {
+			t.Fatal("Unexpected units: ", units)
 		}
 	})
 }
@@ -1112,7 +1212,7 @@ func TestStyleAsIntOnFloat(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 		
-		if _, err := d.StyleAsInt("opacity"); err == nil {
+		if _, _, err := d.StyleAsInt("opacity"); err == nil {
 			t.Fatal("Expected error")
 		}
 	})
@@ -1123,7 +1223,7 @@ func TestStyleAsIntOnString(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if _, err := d.StyleAsFloat("text-align"); err == nil {
+		if _, _, err := d.StyleAsFloat("text-align"); err == nil {
 			t.Fatal("Expected error")
 		}
 	})
@@ -1134,7 +1234,7 @@ func TestStyleAsIntOnInvalid(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		if _, err := d.StyleAsInt("invalid"); err == nil {
+		if _, _, err := d.StyleAsInt("invalid"); err == nil {
 			t.Fatal("Expected error")
 		}
 	})
@@ -1145,13 +1245,19 @@ func TestSetStyleFloat32(t *testing.T) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
 
-		d.SetStyle("opacity", float32(0.75))
-		if s, err := d.Style("opacity"); err != nil {
-			t.Fatal(err)
-		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
+		d.SetStyleWithUnits("margin-left", float32(0.75), "em")
+		if s, err := d.Style("margin-left"); err != nil {
+			panic(err)
+		} else {
+			log.Print(s)
+		}
+
+		if f, units, err := d.StyleAsFloat("margin-left"); err != nil {
 			t.Fatal(err)
 		} else if math.Abs(f - float64(0.75)) > float64(0.01) {
-			t.Fatal("Unexpected value: ", s)
+			t.Fatal("Unexpected value: ", f)
+		} else if units != "" {
+			t.Fatal("Expected no units")
 		}
 	})
 }
@@ -1162,12 +1268,12 @@ func TestSetStyleFloat64(t *testing.T) {
 		d := root.Child(0)
 
 		d.SetStyle("opacity", float64(0.75))
-		if s, err := d.Style("opacity"); err != nil {
-			t.Fatal(err)
-		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
+		if f, units, err := d.StyleAsFloat("opacity"); err != nil {
 			t.Fatal(err)
 		} else if math.Abs(f - float64(0.75)) > float64(0.01) {
-			t.Fatal("Unexpected value: ", s)
+			t.Fatal("Unexpected value: ", f)
+		} else if units != "" {
+			t.Fatal("Expected no units")
 		}
 	})
 }
@@ -1192,10 +1298,12 @@ func TestSetStyleInt(t *testing.T) {
 		d := root.Child(0)
 
 		d.SetStyle("height", 9)
-		if s, err := d.Style("height"); err != nil {
+		if i, units, err := d.StyleAsInt("height"); err != nil {
 			t.Fatal(err)
-		} else if s != "9px" {
-			t.Fatal("Unexpected value: ", s)
+		} else if i != 9 {
+			t.Fatal("Unexpected value: ", i)
+		} else if units != "px" {
+			t.Fatal("Unexpected units: ", units)
 		}
 	})
 }
@@ -1207,10 +1315,12 @@ func TestSetStyleOverwrite(t *testing.T) {
 
 		// Test overwriting a style that already exists
 		d.SetStyle("left", 99)
-		if s, err := d.Style("left"); err != nil {
+		if i, units, err := d.StyleAsInt("left"); err != nil {
 			t.Fatal(err)
-		} else if s != "99px" {
+		} else if i != 99 {
 			t.Fatal("Expected to overwrite style")
+		} else if units != "px" {
+			t.Fatal("Unexpected units: ", units)
 		}
 	})
 }
