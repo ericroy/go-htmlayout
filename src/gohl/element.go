@@ -18,7 +18,6 @@ import (
 	"unsafe"
 	"regexp"
 	"strings"
-	"errors"
 )
 
 const (
@@ -43,23 +42,7 @@ var errorToString = map[HLDOM_RESULT]string{
 	HLDOM_OK_NOT_HANDLED:    "HLDOM_OK_NOT_HANDLED",
 }
 
-// Allows for an optional hash at the start of the value.  Not sure why,
-// but often this hash is present (even for things that are not colors)
-var cssNumberPattern = func() *regexp.Regexp {
-	re, err := regexp.Compile(`^#?([\d-.]*)([^\d-.].*)?$`)
-	if err != nil {
-		panic(err)
-	}
-	return re
-}()
-
-var whitespaceSplitter = func() *regexp.Regexp {
-	re, err := regexp.Compile(`(\S+)`)
-	if err != nil {
-		panic(err)
-	}
-	return re
-}()
+var whitespaceSplitter = regexp.MustCompile(`(\S+)`)
 
 // DomError represents an htmlayout error with an associated
 // dom error code
@@ -71,18 +54,6 @@ type DomError struct {
 func (e *DomError) Error() string {
 	return fmt.Sprintf("%s: %s", errorToString[e.Result], e.Message)
 }
-
-
-// Returned to caller in situations such as attr not found, style not found, etc
-type DoesNotExistError struct {
-	Message string
-}
-
-func (e *DoesNotExistError) Error() string {
-	return e.Message
-}
-
-
 
 func domResultAsString(result HLDOM_RESULT) string {
 	return errorToString[result]
@@ -499,7 +470,9 @@ func (e *Element) SetText(text string) {
 
 // HTML attribute accessors/modifiers:
 
-func (e *Element) Attr(key string) (string, error) {
+// Returns the value of attr and a boolean indicating whether or not that attr exists.
+// If the boolean is true, then the returned string is valid.
+func (e *Element) Attr(key string) (string, bool) {
 	szValue := (*C.WCHAR)(nil)
 	szKey := C.CString(key)
 	defer C.free(unsafe.Pointer(szKey))
@@ -507,29 +480,31 @@ func (e *Element) Attr(key string) (string, error) {
 		domPanic(ret, "Failed to get attribute: ", key)
 	}
 	if szValue != nil {
-		return utf16ToString((*uint16)(szValue)), nil
+		return utf16ToString((*uint16)(szValue)), true
 	}
-	return "", &DoesNotExistError{Message:fmt.Sprint("No such attr: ", key)}
+	return "", false
 }
 
-func (e *Element) AttrAsFloat(key string) (float64, error) {
+func (e *Element) AttrAsFloat(key string) (float64, bool, error) {
 	var f float64
-	if s, err := e.Attr(key); err != nil {
-		return 0.0, err
+	var err error
+	if s, exists := e.Attr(key); !exists {
+		return 0.0, false, nil
 	} else if f, err = strconv.ParseFloat(s, 64); err != nil {
-		return 0.0, err
+		return 0.0, true, err
 	}
-	return float64(f), nil
+	return float64(f), true, nil
 }
 
-func (e *Element) AttrAsInt(key string) (int, error) {
+func (e *Element) AttrAsInt(key string) (int, bool, error) {
 	var i int
-	if s, err := e.Attr(key); err != nil {
-		return 0, err
+	var err error
+	if s, exists := e.Attr(key); !exists {
+		return 0, false, nil
 	} else if i, err = strconv.Atoi(s); err != nil {
-		return 0, err
+		return 0, true, err
 	}
-	return i, nil
+	return i, true, nil
 }
 
 func (e *Element) SetAttr(key string, value interface{}) {
@@ -577,11 +552,7 @@ func (e *Element) AttrCount() uint {
 }
 
 func (e *Element) HasClass(class string) bool {
-	if classList, err := e.Attr("class"); err != nil {
-		// If there was an error, it had better be a DoesNotExistError
-		if _, ok := err.(*DoesNotExistError); !ok {
-			panic(err)
-		}
+	if classList, exists := e.Attr("class"); !exists {
 		return false
 	} else if classes := whitespaceSplitter.FindAllString(classList, -1); classes == nil {
 		return false
@@ -596,11 +567,7 @@ func (e *Element) HasClass(class string) bool {
 }
 
 func (e *Element) AddClass(class string) {
-	if classList, err := e.Attr("class"); err != nil {
-		// If there was an error, it had better be a DoesNotExistError
-		if _, ok := err.(*DoesNotExistError); !ok {
-			panic(err)
-		}
+	if classList, exists := e.Attr("class"); !exists {
 		e.SetAttr("class", class)
 	} else if classes := whitespaceSplitter.FindAllString(classList, -1); classes == nil {
 		e.SetAttr("class", class)
@@ -616,18 +583,15 @@ func (e *Element) AddClass(class string) {
 }
 
 func (e *Element) RemoveClass(class string) {
-	if classList, err := e.Attr("class"); err != nil {
-		// If there was an error, it had better be a DoesNotExistError
-		if _, ok := err.(*DoesNotExistError); !ok {
-			panic(err)
-		}
-	} else if classes := whitespaceSplitter.FindAllString(classList, -1); classes != nil {
-		for i, item := range classes {
-			if class == item {
-				// Delete the item from the list
-				classes = append(classes[:i], classes[i+1:]...)
-				e.SetAttr("class", strings.Join(classes, " "))
-				return
+	if classList, exists := e.Attr("class"); exists {
+		if classes := whitespaceSplitter.FindAllString(classList, -1); classes != nil {
+			for i, item := range classes {
+				if class == item {
+					// Delete the item from the list
+					classes = append(classes[:i], classes[i+1:]...)
+					e.SetAttr("class", strings.Join(classes, " "))
+					return
+				}
 			}
 		}
 	}
@@ -635,7 +599,9 @@ func (e *Element) RemoveClass(class string) {
 
 // CSS style attribute accessors/mutators
 
-func (e *Element) Style(key string) (string, error) {
+// Returns the value of the style and a boolean indicating whether or not that style exists.
+// If the boolean is true, then the returned string is valid.
+func (e *Element) Style(key string) (string, bool) {
 	szValue := (*C.WCHAR)(nil)
 	szKey := C.CString(key)
 	defer C.free(unsafe.Pointer(szKey))
@@ -643,67 +609,25 @@ func (e *Element) Style(key string) (string, error) {
 		domPanic(ret, "Failed to get style: "+key)
 	}
 	if szValue != nil {
-		return utf16ToString((*uint16)(szValue)), nil
+		return utf16ToString((*uint16)(szValue)), true
 	}
-	return "", &DoesNotExistError{Message:fmt.Sprint("No such style: ", key)}
-}
-
-// Returns number value as a float and the css units of the value as a string
-func (e *Element) StyleAsFloat(key string) (float64, string, error) {
-	var f float64
-	var units string
-	if s, err := e.Style(key); err != nil {
-		return 0.0, "", err
-	} else if matches := cssNumberPattern.FindStringSubmatch(s); matches == nil || len(matches) < 2 {
-		return 0.0, "", &strconv.NumError{Func:"StyleAsFloat", Num:s, Err:errors.New("Could not find numeric part")}
-	} else if f, err = strconv.ParseFloat(matches[1], 64); err != nil {
-		return 0.0, "", err
-	} else {
-		units = ""
-		if len(matches) > 2 {
-			units = matches[2]
-		}
-	}
-	return f, units, nil
-}
-
-// Returns number value as an integer and the css units of the value as a string
-func (e *Element) StyleAsInt(key string) (int, string, error) {
-	var i int
-	var units string
-	if s, err := e.Style(key); err != nil {
-		return 0.0, "", err
-	} else if matches := cssNumberPattern.FindStringSubmatch(s); matches == nil || len(matches) < 2 {
-		return 0.0, "", &strconv.NumError{Func:"StyleAsInt", Num:s, Err:errors.New("Could not find numeric part")}
-	} else if i, err = strconv.Atoi(matches[1]); err != nil {
-		return 0.0, "", err
-	} else {
-		units = ""
-		if len(matches) > 2 {
-			units = matches[2]
-		}
-	}
-	return i, units, nil
+	return "", false
 }
 
 func (e *Element) SetStyle(key string, value interface{}) {
-	e.SetStyleWithUnits(key, value, "")
-}
-
-func (e *Element) SetStyleWithUnits(key string, value interface{}, units string) {
 	szKey := C.CString(key)
 	defer C.free(unsafe.Pointer(szKey))
 	var valuePtr *uint16 = nil
 	
 	switch v := value.(type) {
 	case string:
-		valuePtr = stringToUtf16Ptr(fmt.Sprint(v, units))
+		valuePtr = stringToUtf16Ptr(v)
 	case float32:
-		valuePtr = stringToUtf16Ptr(fmt.Sprint(strconv.FormatFloat(float64(v), 'e', -1, 64), units))
+		valuePtr = stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'e', -1, 64))
 	case float64:
-		valuePtr = stringToUtf16Ptr(fmt.Sprint(strconv.FormatFloat(float64(v), 'e', -1, 64), units))
+		valuePtr = stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'e', -1, 64))
 	case int:
-		valuePtr = stringToUtf16Ptr(fmt.Sprint(strconv.Itoa(v), units))
+		valuePtr = stringToUtf16Ptr(strconv.Itoa(v))
 	case nil:
 		valuePtr = nil
 	default:
