@@ -608,8 +608,8 @@ var goNotifyProc = syscall.NewCallback(func(msg uint32, wparam uintptr, lparam u
 		case HLN_ATTACH_BEHAVIOR:
 			params := (*NmhlAttachBehavior)(unsafe.Pointer(lparam))
 			key := C.GoString(params.BehaviorName)
-			if constructor, exists := handler.Behaviors[key]; exists {
-				NewElementFromHandle(params.Element).AttachHandler(constructor())
+			if behavior, exists := handler.Behaviors[key]; exists {
+				NewElementFromHandle(params.Element).AttachHandler(behavior)
 			} else {
 				log.Print("No such behavior: ", key)
 			}
