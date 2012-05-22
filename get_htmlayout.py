@@ -8,7 +8,7 @@ URL = "http://www.terrainformatica.com/htmlayout/HTMLayoutSDK.zip"
 PATH = "./HTMLayoutSDK.zip"
 TARGET = "./htmlayout"
 DLL = os.path.join(TARGET, "bin", "htmlayout.dll")
-DLL_TEST_DEST = os.path.join("src", "gohl", os.path.basename(DLL))
+DLL_TEST_DEST = os.path.join(os.path.basename(DLL))
 
 """
 Borrowed this unzipper from:
