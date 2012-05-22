@@ -12,12 +12,12 @@ import "C"
 import (
 	"fmt"
 	"log"
+	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 	"unicode/utf16"
 	"unsafe"
-	"regexp"
-	"strings"
 )
 
 const (
@@ -29,45 +29,42 @@ const (
 	HLDOM_OPERATION_FAILED  = C.HLDOM_OPERATION_FAILED
 	HLDOM_OK_NOT_HANDLED    = C.HLDOM_OK_NOT_HANDLED
 
+	STATE_LINK       = 0x00000001 // selector :link,    any element having href attribute
+	STATE_HOVER      = 0x00000002 // selector :hover,   element is under the cursor, mouse hover  
+	STATE_ACTIVE     = 0x00000004 // selector :active,  element is activated, e.g. pressed  
+	STATE_FOCUS      = 0x00000008 // selector :focus,   element is in focus  
+	STATE_VISITED    = 0x00000010 // selector :visited, aux flag - not used internally now.
+	STATE_CURRENT    = 0x00000020 // selector :current, current item in collection, e.g. current <option> in <select>
+	STATE_CHECKED    = 0x00000040 // selector :checked, element is checked (or selected), e.g. check box or itme in multiselect
+	STATE_DISABLED   = 0x00000080 // selector :disabled, element is disabled, behavior related flag.
+	STATE_READONLY   = 0x00000100 // selector :read-only, element is read-only, behavior related flag.
+	STATE_EXPANDED   = 0x00000200 // selector :expanded, element is in expanded state - nodes in tree view e.g. <options> in <select>
+	STATE_COLLAPSED  = 0x00000400 // selector :collapsed, mutually exclusive with EXPANDED
+	STATE_INCOMPLETE = 0x00000800 // selector :incomplete, element has images (back/fore/bullet) requested but not delivered.
+	STATE_ANIMATING  = 0x00001000 // selector :animating, is currently animating 
+	STATE_FOCUSABLE  = 0x00002000 // selector :focusable, shall accept focus
+	STATE_ANCHOR     = 0x00004000 // selector :anchor, first element in selection (<select miltiple>), STATE_CURRENT is the current.
+	STATE_SYNTHETIC  = 0x00008000 // selector :synthetic, synthesized DOM elements - e.g. all missed cells in tables (<td>) are getting this flag
+	STATE_OWNS_POPUP = 0x00010000 // selector :owns-popup, anchor(owner) element of visible popup. 
+	STATE_TABFOCUS   = 0x00020000 // selector :tab-focus, element got focus by tab traversal. engine set it together with :focus.
+	STATE_EMPTY      = 0x00040000 // selector :empty - element is empty. 
+	STATE_BUSY       = 0x00080000 // selector :busy, element is busy. HTMLayoutRequestElementData will set this flag if
+	// external data was requested for the element. When data will be delivered engine will reset this flag on the element. 
 
-	STATE_LINK        = 0x00000001   // selector :link,    any element having href attribute
-	STATE_HOVER       = 0x00000002   // selector :hover,   element is under the cursor, mouse hover  
-	STATE_ACTIVE      = 0x00000004   // selector :active,  element is activated, e.g. pressed  
-	STATE_FOCUS       = 0x00000008   // selector :focus,   element is in focus  
-	STATE_VISITED     = 0x00000010   // selector :visited, aux flag - not used internally now.
-	STATE_CURRENT     = 0x00000020   // selector :current, current item in collection, e.g. current <option> in <select>
-	STATE_CHECKED     = 0x00000040   // selector :checked, element is checked (or selected), e.g. check box or itme in multiselect
-	STATE_DISABLED    = 0x00000080   // selector :disabled, element is disabled, behavior related flag.
-	STATE_READONLY    = 0x00000100   // selector :read-only, element is read-only, behavior related flag.
-	STATE_EXPANDED    = 0x00000200   // selector :expanded, element is in expanded state - nodes in tree view e.g. <options> in <select>
-	STATE_COLLAPSED   = 0x00000400   // selector :collapsed, mutually exclusive with EXPANDED
-	STATE_INCOMPLETE  = 0x00000800   // selector :incomplete, element has images (back/fore/bullet) requested but not delivered.
-	STATE_ANIMATING   = 0x00001000   // selector :animating, is currently animating 
-	STATE_FOCUSABLE   = 0x00002000   // selector :focusable, shall accept focus
-	STATE_ANCHOR      = 0x00004000   // selector :anchor, first element in selection (<select miltiple>), STATE_CURRENT is the current.
-	STATE_SYNTHETIC   = 0x00008000   // selector :synthetic, synthesized DOM elements - e.g. all missed cells in tables (<td>) are getting this flag
-	STATE_OWNS_POPUP  = 0x00010000   // selector :owns-popup, anchor(owner) element of visible popup. 
-	STATE_TABFOCUS    = 0x00020000   // selector :tab-focus, element got focus by tab traversal. engine set it together with :focus.
-	STATE_EMPTY       = 0x00040000   // selector :empty - element is empty. 
-	STATE_BUSY        = 0x00080000   // selector :busy, element is busy. HTMLayoutRequestElementData will set this flag if
-	                                 // external data was requested for the element. When data will be delivered engine will reset this flag on the element. 
+	STATE_DRAG_OVER   = 0x00100000 // drag over the block that can accept it (so is current drop target). Flag is set for the drop target block. At any given moment of time it can be only one such block.
+	STATE_DROP_TARGET = 0x00200000 // active drop target. Multiple elements can have this flag when D&D is active. 
+	STATE_MOVING      = 0x00400000 // dragging/moving - the flag is set for the moving element (copy of the drag-source).
+	STATE_COPYING     = 0x00800000 // dragging/copying - the flag is set for the copying element (copy of the drag-source).
+	STATE_DRAG_SOURCE = 0x00C00000 // is set in element that is being dragged.
 
-	STATE_DRAG_OVER   = 0x00100000   // drag over the block that can accept it (so is current drop target). Flag is set for the drop target block. At any given moment of time it can be only one such block.
-	STATE_DROP_TARGET = 0x00200000   // active drop target. Multiple elements can have this flag when D&D is active. 
-	STATE_MOVING      = 0x00400000   // dragging/moving - the flag is set for the moving element (copy of the drag-source).
-	STATE_COPYING     = 0x00800000   // dragging/copying - the flag is set for the copying element (copy of the drag-source).
-	STATE_DRAG_SOURCE = 0x00C00000   // is set in element that is being dragged.
+	STATE_POPUP   = 0x40000000 // this element is in popup state and presented to the user - out of flow now
+	STATE_PRESSED = 0x04000000 // pressed - close to active but has wider life span - e.g. in MOUSE_UP it 
+	// is still on, so behavior can check it in MOUSE_UP to discover CLICK condition.
+	STATE_HAS_CHILDREN = 0x02000000 // has more than one child.    
+	STATE_HAS_CHILD    = 0x01000000 // has single child.
 
-	STATE_POPUP       = 0x40000000   // this element is in popup state and presented to the user - out of flow now
-	STATE_PRESSED     = 0x04000000   // pressed - close to active but has wider life span - e.g. in MOUSE_UP it 
-	                                 // is still on, so behavior can check it in MOUSE_UP to discover CLICK condition.
-	STATE_HAS_CHILDREN= 0x02000000   // has more than one child.    
-	STATE_HAS_CHILD   = 0x01000000   // has single child.
-	                           
-	STATE_IS_LTR      = 0x20000000   // selector :ltr, the element or one of its nearest container has @dir and that dir has "ltr" value
-	STATE_IS_RTL      = 0x10000000   // selector :rtl, the element or one of its nearest container has @dir and that dir has "rtl" value    
-
-
+	STATE_IS_LTR = 0x20000000 // selector :ltr, the element or one of its nearest container has @dir and that dir has "ltr" value
+	STATE_IS_RTL = 0x10000000 // selector :rtl, the element or one of its nearest container has @dir and that dir has "rtl" value    
 
 	BAD_HELEMENT = HELEMENT(unsafe.Pointer(uintptr(0)))
 )
@@ -333,7 +330,6 @@ func (e *Element) PostEvent(eventCode uint, source *Element, reason uint32) {
 	}
 }
 
-
 //
 // DOM structure accessors/modifiers:
 //
@@ -518,7 +514,6 @@ func (e *Element) SetText(text string) {
 	}
 }
 
-
 //
 // HTML attribute accessors/modifiers:
 //
@@ -604,7 +599,6 @@ func (e *Element) AttrCount() uint {
 	return uint(count)
 }
 
-
 //
 // CSS style attribute accessors/mutators
 //
@@ -628,7 +622,7 @@ func (e *Element) SetStyle(key string, value interface{}) {
 	szKey := C.CString(key)
 	defer C.free(unsafe.Pointer(szKey))
 	var valuePtr *uint16 = nil
-	
+
 	switch v := value.(type) {
 	case string:
 		valuePtr = stringToUtf16Ptr(v)
@@ -659,7 +653,6 @@ func (e *Element) ClearStyles(key string) {
 	}
 }
 
-
 //
 // Element state manipulation
 //
@@ -683,7 +676,7 @@ func (e *Element) SetStateFlags(flags uint32) {
 
 // Returns true if the specified flag is "on"
 func (e *Element) GetState(flag uint32) bool {
-	return e.GetStateFlags() & flag != 0
+	return e.GetStateFlags()&flag != 0
 }
 
 // Sets the specified flag to "on" or "off" according to the value of the provided boolean
@@ -700,8 +693,6 @@ func (e *Element) SetState(flag uint32, on bool) {
 		domPanic(ret, "Failed to set element state flag")
 	}
 }
-
-
 
 //
 // The following are not strictly wrappers of htmlayout functions, but rather convenience 
@@ -734,11 +725,8 @@ func (e *Element) SelectUnique(selector string) *Element {
 // Useful when selecting elements base on a programmatically retrieved id (which does
 // not already have the hash on it)
 func (e *Element) SelectId(id string) *Element {
-	return e.SelectUnique(fmt.Sprint("#%s", id))
+	return e.SelectUnique(fmt.Sprintf("#%s", id))
 }
-
-
-
 
 //
 // Functions for manipulating the set of classes applied to this element:
