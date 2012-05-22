@@ -2,12 +2,12 @@ package gohl
 
 import (
 	"log"
+	"math"
 	"regexp"
+	"strconv"
 	"syscall"
 	"testing"
 	"unsafe"
-	"math"
-	"strconv"
 )
 
 const (
@@ -320,8 +320,8 @@ var pages = map[string]string{
 	"three-divs":  `<div id="a"></div><div id="b"></div><div id="c"></div>`,
 	"nested-divs": `<div id="a"><div id="b"></div></div>`,
 	"attr":        `<div id="a" first="5" second="5.1" third="yes"></div>`,
-	"css":		   `<div style="left:10; opacity:0.5; text-align:center;"></div>`,
-	"classes":	   `<div class="one  two three"></div><div></div>`,
+	"css":         `<div style="left:10; opacity:0.5; text-align:center;"></div>`,
+	"classes":     `<div class="one  two three"></div><div></div>`,
 }
 
 // Notify handler deals with WM_NOTIFY messages sent by htmlayout
@@ -799,7 +799,7 @@ func TestAttr(t *testing.T) {
 		} else if first != "5" {
 			t.Fatal("Unexpected value: ", first)
 		}
-		
+
 		if second, exists := d.Attr("second"); !exists {
 			t.Fatal("Should exist")
 		} else if second != "5.1" {
@@ -827,7 +827,7 @@ func TestAttrAsFloatOnInt(t *testing.T) {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("Should exist")
-		} else if math.Abs(value - float64(5.0)) > float64(0.0001) {
+		} else if math.Abs(value-float64(5.0)) > float64(0.0001) {
 			t.Fatal("Unexpected value: ", value)
 		}
 	})
@@ -842,7 +842,7 @@ func TestAttrAsFloatOnFloat(t *testing.T) {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("Should exist")
-		} else if math.Abs(value - float64(5.1)) > float64(0.0001) {
+		} else if math.Abs(value-float64(5.1)) > float64(0.0001) {
 			t.Fatal("Unexpected value: ", value)
 		}
 	})
@@ -958,7 +958,7 @@ func TestSetAttrFloat32(t *testing.T) {
 			t.Fatal("Should exist")
 		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
 			t.Fatal(err)
-		} else if math.Abs(f - float64(pi)) > float64(0.0001) {
+		} else if math.Abs(f-float64(pi)) > float64(0.0001) {
 			t.Fatal("Unexpected value: ", f)
 		}
 	})
@@ -975,7 +975,7 @@ func TestSetAttrFloat64(t *testing.T) {
 			t.Fatal("Should exist")
 		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
 			t.Fatal("Could not parse attr string as float")
-		} else if math.Abs(f - float64(pi)) > float64(0.0001) {
+		} else if math.Abs(f-float64(pi)) > float64(0.0001) {
 			t.Fatal("Unexpected value: ", f)
 		}
 	})
@@ -1050,7 +1050,7 @@ func TestAddClass(t *testing.T) {
 
 		var classes string
 		var exists bool
-		
+
 		d.AddClass("four")
 		if classes, exists = d.Attr("class"); !exists {
 			t.Fatal("Should exist")
@@ -1121,7 +1121,7 @@ func TestStyle(t *testing.T) {
 	testWithHtml(pages["css"], func(hwnd uint32) {
 		root := RootElement(hwnd)
 		d := root.Child(0)
-		
+
 		if s, exists := d.Style("left"); !exists {
 			t.Fatal("Should exist")
 		} else if s != "10px" {
@@ -1132,7 +1132,7 @@ func TestStyle(t *testing.T) {
 			t.Fatal("Should exist")
 		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
 			t.Fatal(err)
-		} else if math.Abs(f - float64(0.5)) > float64(0.05) {
+		} else if math.Abs(f-float64(0.5)) > float64(0.05) {
 			t.Fatal("Unexpected value: ", s)
 		}
 
@@ -1158,7 +1158,7 @@ func TestSetStyleFloat32(t *testing.T) {
 			t.Fatal("Should exist")
 		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
 			t.Fatal(err)
-		} else if math.Abs(f - float64(0.75)) > float64(0.05) {
+		} else if math.Abs(f-float64(0.75)) > float64(0.05) {
 			log.Print(s)
 			t.Fatal("Unexpected value: ", f)
 		}
@@ -1175,7 +1175,7 @@ func TestSetStyleFloat64(t *testing.T) {
 			t.Fatal("Should exist")
 		} else if f, err := strconv.ParseFloat(s, 64); err != nil {
 			t.Fatal(err)
-		}  else if math.Abs(f - float64(0.75)) > float64(0.05) {
+		} else if math.Abs(f-float64(0.75)) > float64(0.05) {
 			t.Fatal("Unexpected value: ", f)
 		}
 	})
