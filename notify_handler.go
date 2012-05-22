@@ -1,9 +1,7 @@
 package gohl
 
-type EventHandlerConstructor func() *EventHandler
-
 type NotifyHandler struct {
-	Behaviors          map[string]EventHandlerConstructor
+	Behaviors          map[string]*EventHandler
 	OnCreateControl    func(params *NmhlCreateControl) uintptr
 	OnControlCreated   func(params *NmhlCreateControl) uintptr
 	OnDestroyControl   func(params *NmhlDestroyControl) uintptr
