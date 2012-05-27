@@ -308,6 +308,7 @@ var (
 	// get garbage collected.
 	notifyHandlers	= make(map[uintptr]*NotifyHandler, 8)
 	eventHandlers	= make(map[uintptr]*EventHandler, 128)
+	behaviors	= make(map[uintptr]*EventHandler, 32)
 )
 
 type HELEMENT C.HELEMENT
@@ -488,10 +489,15 @@ var goElementProc = syscall.NewCallback(func(tag uintptr, he unsafe.Pointer, evt
 
 	var handler *EventHandler
 	var exists bool
-	if handler, exists = eventHandlers[key]; !exists {
-		log.Printf("Warning: No handler for tag %x (%s).\nEvent group was: %x\nParams.Cmd was: %x",
-			tag, NewElementFromHandle(HELEMENT(he)).Describe(), evtg, *(*uint32)(params))
-		return C.FALSE
+	var isBehavior bool
+	if handler, exists = behaviors[key]; !exists {
+		if handler, exists = eventHandlers[key]; !exists {
+			log.Printf("Warning: No handler for tag %x (%s).\nEvent group was: %x\nParams.Cmd was: %x",
+				tag, NewElementFromHandle(HELEMENT(he)).Describe(), evtg, *(*uint32)(params))
+			return C.FALSE
+		}
+	} else {
+		isBehavior = true
 	}
 
 	handled := false
@@ -503,11 +509,13 @@ var goElementProc = syscall.NewCallback(func(tag uintptr, he unsafe.Pointer, evt
 				handler.OnAttached(HELEMENT(he))
 			}
 		} else if p.Cmd == BEHAVIOR_DETACH {
-			log.Print("Detach event handler to ", NewElementFromHandle(HELEMENT(he)).Describe())
+			log.Print("Detach event handler from ", NewElementFromHandle(HELEMENT(he)).Describe())
 			if handler.OnDetached != nil {
 				handler.OnDetached(HELEMENT(he))
 			}
-			delete(eventHandlers, key)
+			if !isBehavior {
+				delete(eventHandlers, key)
+			}
 		}
 		handled = true
 	case C.HANDLE_MOUSE:
@@ -612,7 +620,7 @@ var goNotifyProc = syscall.NewCallback(func(msg uint32, wparam uintptr, lparam u
 			params := (*NmhlAttachBehavior)(unsafe.Pointer(lparam))
 			key := C.GoString(params.BehaviorName)
 			if behavior, exists := handler.Behaviors[key]; exists {
-				NewElementFromHandle(params.Element).AttachHandler(behavior)
+				NewElementFromHandle(params.Element).attachBehavior(behavior)
 			} else {
 				log.Print("No such behavior: ", key)
 			}

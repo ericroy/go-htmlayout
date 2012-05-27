@@ -221,6 +221,24 @@ func (e *Element) Equals(other *Element) bool {
 	return e.handle == other.handle
 }
 
+// This is the same as AttachHandler, except that behaviors are singleton instances stored
+// in a master map.  They may be shared among many elements since they have no state.
+// The only reason we keep a separate set of the behaviors is so that the event handler
+// dispatch method can tell if an event handler is a behavior or a regular handler.
+func (e *Element) attachBehavior(handler *EventHandler) {
+	tag := uintptr(unsafe.Pointer(handler))
+	behaviors[tag] = handler
+	if subscription := handler.Subscription(); subscription == HANDLE_ALL {
+		if ret := C.HTMLayoutAttachEventHandler(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
+			domPanic(ret, "Failed to attach event handler to element")
+		}
+	} else {
+		if ret := C.HTMLayoutAttachEventHandlerEx(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
+			domPanic(ret, "Failed to attach event handler to element")
+		}
+	}
+}
+
 func (e *Element) AttachHandler(handler *EventHandler) {
 	tag := uintptr(unsafe.Pointer(handler))
 	if _, exists := eventHandlers[tag]; exists {
