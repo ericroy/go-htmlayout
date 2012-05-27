@@ -489,7 +489,8 @@ var goElementProc = syscall.NewCallback(func(tag uintptr, he unsafe.Pointer, evt
 	var handler *EventHandler
 	var exists bool
 	if handler, exists = eventHandlers[key]; !exists {
-		log.Printf("Warning: No handler for tag %x (%s).\nEvent group was: %x", tag, NewElementFromHandle(HELEMENT(he)).Describe(), evtg)
+		log.Printf("Warning: No handler for tag %x (%s).\nEvent group was: %x\nParams.Cmd was: %x",
+			tag, NewElementFromHandle(HELEMENT(he)).Describe(), evtg, *(*uint32)(params))
 		return C.FALSE
 	}
 
