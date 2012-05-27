@@ -713,6 +713,54 @@ func (e *Element) SetState(flag uint32, on bool) {
 }
 
 //
+// Functions for retrieving the various dimensions of an element
+//
+
+func (e *Element) getRect(rectTypeFlags uint32) (left, top, right, bottom int32) {
+	r := Rect{}
+	if ret := C.HTMLayoutGetElementLocation(e.handle, (C.LPRECT)(unsafe.Pointer(&r)), C.UINT(rectTypeFlags)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get element rect")
+	}
+	return r.Left, r.Top, r.Right, r.Bottom
+}
+
+func (e *Element) ContentBox() (left, top, right, bottom int32) {
+	return e.getRect(CONTENT_BOX)
+}
+
+func (e *Element) ContentBoxSize() (width, height int32) {
+	l, t, r, b := e.getRect(CONTENT_BOX)
+	return r - l, b - t
+}
+
+func (e *Element) PaddingBox() (left, top, right, bottom int32) {
+	return e.getRect(PADDING_BOX)
+}
+
+func (e *Element) PaddingBoxSize() (width, height int32) {
+	l, t, r, b := e.getRect(PADDING_BOX)
+	return r - l, b - t
+}
+
+func (e *Element) BorderBox() (left, top, right, bottom int32) {
+	return e.getRect(BORDER_BOX)
+}
+
+func (e *Element) BorderBoxSize() (width, height int32) {
+	l, t, r, b := e.getRect(BORDER_BOX)
+	return r - l, b - t
+}
+
+func (e *Element) MarginBox() (left, top, right, bottom int32) {
+	return e.getRect(MARGIN_BOX)
+}
+
+func (e *Element) MarginBoxSize() (width, height int32) {
+	l, t, r, b := e.getRect(MARGIN_BOX)
+	return r - l, b - t
+}
+
+//
 // The following are not strictly wrappers of htmlayout functions, but rather convenience 
 // functions that are helpful in common use cases
 //
