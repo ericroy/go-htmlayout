@@ -10,8 +10,8 @@ package gohl
 import "C"
 
 import (
-	"errors"
 	"log"
+	"errors"
 	"syscall"
 	"unsafe"
 )

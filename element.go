@@ -11,7 +11,6 @@ import "C"
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -110,7 +109,7 @@ func stringToUtf16(s string) []uint16 {
 // with a terminating NUL removed.
 func utf16ToString(s *uint16) string {
 	if s == nil {
-		log.Panic("null cstring")
+		panic("null cstring")
 	}
 	us := make([]uint16, 0, 256)
 	for p := uintptr(unsafe.Pointer(s)); ; p += 2 {
@@ -589,7 +588,7 @@ func (e *Element) SetAttr(key string, value interface{}) {
 	case nil:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), nil)
 	default:
-		log.Panic("Don't know how to format this argument type")
+		panic("Don't know how to format this argument type")
 	}
 	if ret != HLDOM_OK {
 		domPanic(ret, "Failed to set attribute: "+key)
@@ -653,7 +652,7 @@ func (e *Element) SetStyle(key string, value interface{}) {
 	case nil:
 		valuePtr = nil
 	default:
-		log.Panic("Don't know how to format this argument type")
+		panic("Don't know how to format this argument type")
 	}
 
 	if ret := C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(valuePtr)); ret != HLDOM_OK {
