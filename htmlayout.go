@@ -498,10 +498,12 @@ var goElementProc = syscall.NewCallback(func(tag uintptr, he unsafe.Pointer, evt
 	switch evtg {
 	case C.HANDLE_INITIALIZATION:
 		if p := (*InitializationParams)(params); p.Cmd == BEHAVIOR_ATTACH {
+			log.Print("Attach event handler to ", NewElementFromHandle(HELEMENT(he)).Describe())
 			if handler.OnAttached != nil {
 				handler.OnAttached(HELEMENT(he))
 			}
 		} else if p.Cmd == BEHAVIOR_DETACH {
+			log.Print("Detach event handler to ", NewElementFromHandle(HELEMENT(he)).Describe())
 			if handler.OnDetached != nil {
 				handler.OnDetached(HELEMENT(he))
 			}
