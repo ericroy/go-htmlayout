@@ -665,6 +665,14 @@ func LoadHtml(hwnd uint32, data []byte, baseUrl string) error {
 	return nil
 }
 
+// Load resource (file or url) into window
+func LoadResource(hwnd uint32, uri string) error {
+	if ok := C.HTMLayoutLoadFile(C.HWND(C.HANDLE(uintptr(hwnd))), (*C.WCHAR)(stringToUtf16Ptr(uri))); ok == 0 {
+		return errors.New("HTMLayoutLoadFile failed")
+	}
+	return nil
+}
+
 // Call this from your NotifyHandler.HandleLoadData method if you want htmlayout to
 // process the data right away so you don't have to provide a buffer in the NmhlLoadData structure.
 func DataReady(hwnd uint32, uri *uint16, data []byte) bool {
