@@ -217,7 +217,7 @@ func (e *Element) Handle() HELEMENT {
 }
 
 func (e *Element) Equals(other *Element) bool {
-	return e.handle == other.handle
+	return other != nil && e.handle == other.handle
 }
 
 // This is the same as AttachHandler, except that behaviors are singleton instances stored
