@@ -20,62 +20,68 @@ import (
 )
 
 const (
-	HLDOM_OK		= C.HLDOM_OK
-	HLDOM_INVALID_HWND	= C.HLDOM_INVALID_HWND
-	HLDOM_INVALID_HANDLE	= C.HLDOM_INVALID_HANDLE
-	HLDOM_PASSIVE_HANDLE	= C.HLDOM_PASSIVE_HANDLE
-	HLDOM_INVALID_PARAMETER	= C.HLDOM_INVALID_PARAMETER
-	HLDOM_OPERATION_FAILED	= C.HLDOM_OPERATION_FAILED
-	HLDOM_OK_NOT_HANDLED	= C.HLDOM_OK_NOT_HANDLED
+	HLDOM_OK                = C.HLDOM_OK
+	HLDOM_INVALID_HWND      = C.HLDOM_INVALID_HWND
+	HLDOM_INVALID_HANDLE    = C.HLDOM_INVALID_HANDLE
+	HLDOM_PASSIVE_HANDLE    = C.HLDOM_PASSIVE_HANDLE
+	HLDOM_INVALID_PARAMETER = C.HLDOM_INVALID_PARAMETER
+	HLDOM_OPERATION_FAILED  = C.HLDOM_OPERATION_FAILED
+	HLDOM_OK_NOT_HANDLED    = C.HLDOM_OK_NOT_HANDLED
 
-	STATE_LINK		= 0x00000001	// selector :link,    any element having href attribute
-	STATE_HOVER		= 0x00000002	// selector :hover,   element is under the cursor, mouse hover  
-	STATE_ACTIVE		= 0x00000004	// selector :active,  element is activated, e.g. pressed  
-	STATE_FOCUS		= 0x00000008	// selector :focus,   element is in focus  
-	STATE_VISITED		= 0x00000010	// selector :visited, aux flag - not used internally now.
-	STATE_CURRENT		= 0x00000020	// selector :current, current item in collection, e.g. current <option> in <select>
-	STATE_CHECKED		= 0x00000040	// selector :checked, element is checked (or selected), e.g. check box or itme in multiselect
-	STATE_DISABLED		= 0x00000080	// selector :disabled, element is disabled, behavior related flag.
-	STATE_READONLY		= 0x00000100	// selector :read-only, element is read-only, behavior related flag.
-	STATE_EXPANDED		= 0x00000200	// selector :expanded, element is in expanded state - nodes in tree view e.g. <options> in <select>
-	STATE_COLLAPSED		= 0x00000400	// selector :collapsed, mutually exclusive with EXPANDED
-	STATE_INCOMPLETE	= 0x00000800	// selector :incomplete, element has images (back/fore/bullet) requested but not delivered.
-	STATE_ANIMATING		= 0x00001000	// selector :animating, is currently animating 
-	STATE_FOCUSABLE		= 0x00002000	// selector :focusable, shall accept focus
-	STATE_ANCHOR		= 0x00004000	// selector :anchor, first element in selection (<select miltiple>), STATE_CURRENT is the current.
-	STATE_SYNTHETIC		= 0x00008000	// selector :synthetic, synthesized DOM elements - e.g. all missed cells in tables (<td>) are getting this flag
-	STATE_OWNS_POPUP	= 0x00010000	// selector :owns-popup, anchor(owner) element of visible popup. 
-	STATE_TABFOCUS		= 0x00020000	// selector :tab-focus, element got focus by tab traversal. engine set it together with :focus.
-	STATE_EMPTY		= 0x00040000	// selector :empty - element is empty. 
-	STATE_BUSY		= 0x00080000	// selector :busy, element is busy. HTMLayoutRequestElementData will set this flag if
+	STATE_LINK       = 0x00000001 // selector :link,    any element having href attribute
+	STATE_HOVER      = 0x00000002 // selector :hover,   element is under the cursor, mouse hover  
+	STATE_ACTIVE     = 0x00000004 // selector :active,  element is activated, e.g. pressed  
+	STATE_FOCUS      = 0x00000008 // selector :focus,   element is in focus  
+	STATE_VISITED    = 0x00000010 // selector :visited, aux flag - not used internally now.
+	STATE_CURRENT    = 0x00000020 // selector :current, current item in collection, e.g. current <option> in <select>
+	STATE_CHECKED    = 0x00000040 // selector :checked, element is checked (or selected), e.g. check box or itme in multiselect
+	STATE_DISABLED   = 0x00000080 // selector :disabled, element is disabled, behavior related flag.
+	STATE_READONLY   = 0x00000100 // selector :read-only, element is read-only, behavior related flag.
+	STATE_EXPANDED   = 0x00000200 // selector :expanded, element is in expanded state - nodes in tree view e.g. <options> in <select>
+	STATE_COLLAPSED  = 0x00000400 // selector :collapsed, mutually exclusive with EXPANDED
+	STATE_INCOMPLETE = 0x00000800 // selector :incomplete, element has images (back/fore/bullet) requested but not delivered.
+	STATE_ANIMATING  = 0x00001000 // selector :animating, is currently animating 
+	STATE_FOCUSABLE  = 0x00002000 // selector :focusable, shall accept focus
+	STATE_ANCHOR     = 0x00004000 // selector :anchor, first element in selection (<select miltiple>), STATE_CURRENT is the current.
+	STATE_SYNTHETIC  = 0x00008000 // selector :synthetic, synthesized DOM elements - e.g. all missed cells in tables (<td>) are getting this flag
+	STATE_OWNS_POPUP = 0x00010000 // selector :owns-popup, anchor(owner) element of visible popup. 
+	STATE_TABFOCUS   = 0x00020000 // selector :tab-focus, element got focus by tab traversal. engine set it together with :focus.
+	STATE_EMPTY      = 0x00040000 // selector :empty - element is empty. 
+	STATE_BUSY       = 0x00080000 // selector :busy, element is busy. HTMLayoutRequestElementData will set this flag if
 	// external data was requested for the element. When data will be delivered engine will reset this flag on the element. 
 
-	STATE_DRAG_OVER		= 0x00100000	// drag over the block that can accept it (so is current drop target). Flag is set for the drop target block. At any given moment of time it can be only one such block.
-	STATE_DROP_TARGET	= 0x00200000	// active drop target. Multiple elements can have this flag when D&D is active. 
-	STATE_MOVING		= 0x00400000	// dragging/moving - the flag is set for the moving element (copy of the drag-source).
-	STATE_COPYING		= 0x00800000	// dragging/copying - the flag is set for the copying element (copy of the drag-source).
-	STATE_DRAG_SOURCE	= 0x00C00000	// is set in element that is being dragged.
+	STATE_DRAG_OVER   = 0x00100000 // drag over the block that can accept it (so is current drop target). Flag is set for the drop target block. At any given moment of time it can be only one such block.
+	STATE_DROP_TARGET = 0x00200000 // active drop target. Multiple elements can have this flag when D&D is active. 
+	STATE_MOVING      = 0x00400000 // dragging/moving - the flag is set for the moving element (copy of the drag-source).
+	STATE_COPYING     = 0x00800000 // dragging/copying - the flag is set for the copying element (copy of the drag-source).
+	STATE_DRAG_SOURCE = 0x00C00000 // is set in element that is being dragged.
 
-	STATE_POPUP	= 0x40000000	// this element is in popup state and presented to the user - out of flow now
-	STATE_PRESSED	= 0x04000000	// pressed - close to active but has wider life span - e.g. in MOUSE_UP it 
+	STATE_POPUP   = 0x40000000 // this element is in popup state and presented to the user - out of flow now
+	STATE_PRESSED = 0x04000000 // pressed - close to active but has wider life span - e.g. in MOUSE_UP it 
 	// is still on, so behavior can check it in MOUSE_UP to discover CLICK condition.
-	STATE_HAS_CHILDREN	= 0x02000000	// has more than one child.    
-	STATE_HAS_CHILD		= 0x01000000	// has single child.
+	STATE_HAS_CHILDREN = 0x02000000 // has more than one child.    
+	STATE_HAS_CHILD    = 0x01000000 // has single child.
 
-	STATE_IS_LTR	= 0x20000000	// selector :ltr, the element or one of its nearest container has @dir and that dir has "ltr" value
-	STATE_IS_RTL	= 0x10000000	// selector :rtl, the element or one of its nearest container has @dir and that dir has "rtl" value    
+	STATE_IS_LTR = 0x20000000 // selector :ltr, the element or one of its nearest container has @dir and that dir has "ltr" value
+	STATE_IS_RTL = 0x10000000 // selector :rtl, the element or one of its nearest container has @dir and that dir has "rtl" value    
 
-	BAD_HELEMENT	= HELEMENT(unsafe.Pointer(uintptr(0)))
+	RESET_STYLE_THIS = 0x0020 // reset styles - this may require if you have styles dependent from attributes,
+	RESET_STYLE_DEEP = 0x0010 // use these flags after SetAttribute then. RESET_STYLE_THIS is faster than RESET_STYLE_DEEP.
+	MEASURE_INPLACE  = 0x0001 // use this flag if you do not expect any dimensional changes - this is faster than REMEASURE
+	MEASURE_DEEP     = 0x0002 // use this flag if changes of some attributes/content may cause change of dimensions of the element  
+	REDRAW_NOW       = 0x8000
+
+	BAD_HELEMENT = HELEMENT(unsafe.Pointer(uintptr(0)))
 )
 
 var errorToString = map[HLDOM_RESULT]string{
-	HLDOM_OK:			"HLDOM_OK",
-	HLDOM_INVALID_HWND:		"HLDOM_INVALID_HWND",
-	HLDOM_INVALID_HANDLE:		"HLDOM_INVALID_HANDLE",
-	HLDOM_PASSIVE_HANDLE:		"HLDOM_PASSIVE_HANDLE",
-	HLDOM_INVALID_PARAMETER:	"HLDOM_INVALID_PARAMETER",
-	HLDOM_OPERATION_FAILED:		"HLDOM_OPERATION_FAILED",
-	HLDOM_OK_NOT_HANDLED:		"HLDOM_OK_NOT_HANDLED",
+	HLDOM_OK:                "HLDOM_OK",
+	HLDOM_INVALID_HWND:      "HLDOM_INVALID_HWND",
+	HLDOM_INVALID_HANDLE:    "HLDOM_INVALID_HANDLE",
+	HLDOM_PASSIVE_HANDLE:    "HLDOM_PASSIVE_HANDLE",
+	HLDOM_INVALID_PARAMETER: "HLDOM_INVALID_PARAMETER",
+	HLDOM_OPERATION_FAILED:  "HLDOM_OPERATION_FAILED",
+	HLDOM_OK_NOT_HANDLED:    "HLDOM_OK_NOT_HANDLED",
 }
 
 var whitespaceSplitter = regexp.MustCompile(`(\S+)`)
@@ -83,8 +89,8 @@ var whitespaceSplitter = regexp.MustCompile(`(\S+)`)
 // DomError represents an htmlayout error with an associated
 // dom error code
 type DomError struct {
-	Result	HLDOM_RESULT
-	Message	string
+	Result  HLDOM_RESULT
+	Message string
 }
 
 func (e *DomError) Error() string {
@@ -275,12 +281,26 @@ func (e *Element) DetachHandler(handler *EventHandler) {
 	}
 }
 
-func (e *Element) Update(render bool) {
-	var shouldRender C.BOOL
-	if render {
-		shouldRender = C.BOOL(1)
+func (e *Element) Update(restyle, restyleDeep, remeasure, remeasureDeep, render bool) {
+	var flags uint32
+	if restyle {
+		if restyleDeep {
+			flags |= RESET_STYLE_DEEP
+		} else {
+			flags |= RESET_STYLE_THIS
+		}
 	}
-	if ret := C.HTMLayoutUpdateElement(e.handle, shouldRender); ret != HLDOM_OK {
+	if remeasure {
+		if remeasureDeep {
+			flags |= MEASURE_DEEP
+		} else {
+			flags |= MEASURE_INPLACE
+		}
+	}
+	if render {
+		flags |= REDRAW_NOW
+	}
+	if ret := C.HTMLayoutUpdateElementEx(e.handle, C.UINT(flags)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to update element")
 	}
 }
