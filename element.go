@@ -606,6 +606,10 @@ func (e *Element) SetAttr(key string, value interface{}) {
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'g', -1, 64))))
 	case int:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.Itoa(v))))
+	case int32:
+		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatInt(int64(v), 10))))
+	case int64:
+		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(stringToUtf16Ptr(strconv.FormatInt(v, 10))))
 	case nil:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), nil)
 	default:
@@ -670,6 +674,10 @@ func (e *Element) SetStyle(key string, value interface{}) {
 		valuePtr = stringToUtf16Ptr(strconv.FormatFloat(float64(v), 'g', -1, 64))
 	case int:
 		valuePtr = stringToUtf16Ptr(strconv.Itoa(v))
+	case int32:
+		valuePtr = stringToUtf16Ptr(strconv.FormatInt(int64(v), 10))
+	case int64:
+		valuePtr = stringToUtf16Ptr(strconv.FormatInt(v, 10))
 	case nil:
 		valuePtr = nil
 	default:
