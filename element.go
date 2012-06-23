@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"reflect"
 	"unicode/utf16"
 	"unsafe"
 )
@@ -608,7 +609,7 @@ func (e *Element) SetAttr(key string, value interface{}) {
 	case nil:
 		ret = C.HTMLayoutSetAttributeByName(e.handle, (*C.CHAR)(szKey), nil)
 	default:
-		panic("Don't know how to format this argument type")
+		panic(fmt.Sprintf("Don't know how to format this argument type: %s", reflect.TypeOf(v)))
 	}
 	if ret != HLDOM_OK {
 		domPanic(ret, "Failed to set attribute: "+key)
@@ -672,7 +673,7 @@ func (e *Element) SetStyle(key string, value interface{}) {
 	case nil:
 		valuePtr = nil
 	default:
-		panic("Don't know how to format this argument type")
+		panic(fmt.Sprintf("Don't know how to format this argument type: %s", reflect.TypeOf(v)))
 	}
 
 	if ret := C.HTMLayoutSetStyleAttribute(e.handle, (*C.CHAR)(szKey), (*C.WCHAR)(valuePtr)); ret != HLDOM_OK {
