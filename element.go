@@ -741,8 +741,20 @@ func (e *Element) SetState(flag uint32, on bool) {
 }
 
 //
-// Functions for retrieving the various dimensions of an element
+// Functions for retrieving/setting the various dimensions of an element
 //
+
+func (e *Element) Move(x, y int) {
+	if ret := C.HTMLayoutMoveElement(e.handle, C.INT(x), C.INT(y)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to move element")
+	}
+}
+
+func (e *Element) Resize(x, y, w, h int) {
+	if ret := C.HTMLayoutMoveElementEx(e.handle, C.INT(x), C.INT(y), C.INT(w), C.INT(h)); ret != HLDOM_OK {
+		domPanic(ret, "Failed to resize element")
+	}
+}
 
 func (e *Element) getRect(rectTypeFlags uint32) (left, top, right, bottom int) {
 	r := Rect{}
