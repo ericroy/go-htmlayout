@@ -768,6 +768,10 @@ func (e *Element) ContentBox() (left, top, right, bottom int) {
 	return e.getRect(CONTENT_BOX | CONTAINER_RELATIVE)
 }
 
+func (e *Element) ContentViewBox() (left, top, right, bottom int) {
+	return e.getRect(CONTENT_BOX | VIEW_RELATIVE)
+}
+
 func (e *Element) ContentBoxSize() (width, height int) {
 	l, t, r, b := e.getRect(CONTENT_BOX)
 	return int(r - l), int(b - t)
