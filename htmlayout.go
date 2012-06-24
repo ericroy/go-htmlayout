@@ -306,6 +306,11 @@ const (
 	PADDING_BOX = C.PADDING_BOX
 	BORDER_BOX  = C.BORDER_BOX
 	MARGIN_BOX  = C.MARGIN_BOX
+
+	ROOT_RELATIVE      = C.ROOT_RELATIVE      // - or this flag if you want to get HTMLayout window relative coordinates, otherwise it will use nearest windowed container e.g. popup window.
+	SELF_RELATIVE      = C.SELF_RELATIVE      // - "or" this flag if you want to get coordinates relative to the origin of element iself.
+	CONTAINER_RELATIVE = C.CONTAINER_RELATIVE // - position inside immediate container.
+	VIEW_RELATIVE      = C.VIEW_RELATIVE
 )
 
 var (

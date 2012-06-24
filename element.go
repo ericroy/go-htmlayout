@@ -765,7 +765,7 @@ func (e *Element) getRect(rectTypeFlags uint32) (left, top, right, bottom int) {
 }
 
 func (e *Element) ContentBox() (left, top, right, bottom int) {
-	return e.getRect(CONTENT_BOX)
+	return e.getRect(CONTENT_BOX | CONTAINER_RELATIVE)
 }
 
 func (e *Element) ContentBoxSize() (width, height int) {
@@ -774,7 +774,11 @@ func (e *Element) ContentBoxSize() (width, height int) {
 }
 
 func (e *Element) PaddingBox() (left, top, right, bottom int) {
-	return e.getRect(PADDING_BOX)
+	return e.getRect(PADDING_BOX | CONTAINER_RELATIVE)
+}
+
+func (e *Element) PaddingViewBox() (left, top, right, bottom int) {
+	return e.getRect(PADDING_BOX | VIEW_RELATIVE)
 }
 
 func (e *Element) PaddingBoxSize() (width, height int) {
@@ -783,7 +787,11 @@ func (e *Element) PaddingBoxSize() (width, height int) {
 }
 
 func (e *Element) BorderBox() (left, top, right, bottom int) {
-	return e.getRect(BORDER_BOX)
+	return e.getRect(BORDER_BOX | CONTAINER_RELATIVE)
+}
+
+func (e *Element) BorderViewBox() (left, top, right, bottom int) {
+	return e.getRect(BORDER_BOX | VIEW_RELATIVE)
 }
 
 func (e *Element) BorderBoxSize() (width, height int) {
@@ -792,7 +800,11 @@ func (e *Element) BorderBoxSize() (width, height int) {
 }
 
 func (e *Element) MarginBox() (left, top, right, bottom int) {
-	return e.getRect(MARGIN_BOX)
+	return e.getRect(MARGIN_BOX | CONTAINER_RELATIVE)
+}
+
+func (e *Element) MarginViewBox() (left, top, right, bottom int) {
+	return e.getRect(MARGIN_BOX | VIEW_RELATIVE)
 }
 
 func (e *Element) MarginBoxSize() (width, height int) {
