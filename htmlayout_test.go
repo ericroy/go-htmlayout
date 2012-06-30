@@ -241,7 +241,7 @@ func looseEqual(a, b string) bool {
 func expectDomError(code HLDOM_RESULT) {
 	if err := recover(); err == nil {
 		log.Panic("Expected a DomError but got no error")
-	} else if de, ok := err.(DomError); !ok {
+	} else if de, ok := err.(*DomError); !ok {
 		log.Panic("Expected DomError, instead got: ", err)
 	} else if de.Result != code {
 		log.Panicf("Expected DomError with code %s, but got code %s instead ", domResultAsString(code), domResultAsString(de.Result))

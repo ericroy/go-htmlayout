@@ -103,7 +103,7 @@ func domResultAsString(result HLDOM_RESULT) string {
 }
 
 func domPanic(result C.HLDOM_RESULT, message ...interface{}) {
-	panic(DomError{HLDOM_RESULT(result), fmt.Sprint(message...)})
+	panic(&DomError{HLDOM_RESULT(result), fmt.Sprint(message...)})
 }
 
 // Returns the utf-16 encoding of the utf-8 string s,
