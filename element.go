@@ -704,7 +704,7 @@ func (e *Element) ClearStyles(key string) {
 //
 
 // Gets the whole set of state flags for this element
-func (e *Element) GetStateFlags() uint32 {
+func (e *Element) StateFlags() uint32 {
 	var state C.UINT
 	if ret := C.HTMLayoutGetElementState(e.handle, &state); ret != HLDOM_OK {
 		domPanic(ret, "Failed to get element state flags")
@@ -721,8 +721,8 @@ func (e *Element) SetStateFlags(flags uint32) {
 }
 
 // Returns true if the specified flag is "on"
-func (e *Element) GetState(flag uint32) bool {
-	return e.GetStateFlags()&flag != 0
+func (e *Element) State(flag uint32) bool {
+	return e.StateFlags()&flag != 0
 }
 
 // Sets the specified flag to "on" or "off" according to the value of the provided boolean
