@@ -1223,3 +1223,17 @@ func TestSetStyleOverwrite(t *testing.T) {
 		}
 	})
 }
+
+func TestAttachSameHandlerToTwoElements(t *testing.T) {
+	testWithHtml(pages["two-divs"], func(hwnd uint32) {
+		root := RootElement(hwnd)
+		d1 := root.Child(0)
+		d2 := root.Child(1)
+
+		handler := &EventHandler{}
+		d1.AttachHandler(handler)
+		d2.AttachHandler(handler)
+		d2.DetachHandler(handler)
+		d1.DetachHandler(handler)
+	})
+}

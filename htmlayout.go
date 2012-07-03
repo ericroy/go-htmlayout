@@ -316,9 +316,10 @@ const (
 var (
 	// Hold a reference to handlers that are in-use so that they don't
 	// get garbage collected.
-	notifyHandlers = make(map[uintptr]*NotifyHandler, 8)
-	eventHandlers  = make(map[uintptr]*EventHandler, 128)
-	behaviors      = make(map[uintptr]*EventHandler, 32)
+	notifyHandlers      = make(map[uintptr]*NotifyHandler, 8)
+	windowEventHandlers = make(map[uint32]*EventHandler, 8)
+	eventHandlers       = make(map[*EventHandler]map[HELEMENT]bool, 128)
+	behaviors           = make(map[*EventHandler]int, 32)
 )
 
 type HELEMENT C.HELEMENT
@@ -495,22 +496,9 @@ type NmhlAttachBehavior struct {
 
 // Main event handler that dispatches to the right element handler
 var goElementProc = syscall.NewCallback(func(tag uintptr, he unsafe.Pointer, evtg uint32, params unsafe.Pointer) C.BOOL {
-	key := uintptr(tag)
-
-	var handler *EventHandler
-	var exists bool
-	var isBehavior bool
-	if handler, exists = behaviors[key]; !exists {
-		if handler, exists = eventHandlers[key]; !exists {
-			log.Printf("Warning: No handler for tag %x (%s).\nEvent group was: %x\nParams.Cmd was: %x",
-				tag, NewElementFromHandle(HELEMENT(he)).Describe(), evtg, *(*uint32)(params))
-			return C.FALSE
-		}
-	} else {
-		isBehavior = true
-	}
-
+	handler := (*EventHandler)(unsafe.Pointer(tag))
 	handled := false
+
 	switch evtg {
 	case C.HANDLE_INITIALIZATION:
 		if p := (*InitializationParams)(params); p.Cmd == BEHAVIOR_ATTACH {
@@ -523,8 +511,16 @@ var goElementProc = syscall.NewCallback(func(tag uintptr, he unsafe.Pointer, evt
 			if handler.OnDetached != nil {
 				handler.OnDetached(HELEMENT(he))
 			}
-			if !isBehavior {
-				delete(eventHandlers, key)
+
+			// If this was a behavior detaching, decrement the reference count and stop tracking
+			// the pointer if the ref count has been exhausted
+			if behaviorRefCount, exists := behaviors[handler]; exists {
+				behaviorRefCount--
+				if behaviorRefCount == 0 {
+					delete(behaviors, handler)
+				} else {
+					behaviors[handler] = behaviorRefCount
+				}
 			}
 		}
 		handled = true
@@ -630,6 +626,12 @@ var goNotifyProc = syscall.NewCallback(func(msg uint32, wparam uintptr, lparam u
 			params := (*NmhlAttachBehavior)(unsafe.Pointer(lparam))
 			key := C.GoString(params.BehaviorName)
 			if behavior, exists := handler.Behaviors[key]; exists {
+				// Increment the reference count for this behavior
+				if refCount, exists := behaviors[behavior]; exists {
+					behaviors[behavior] = refCount + 1
+				} else {
+					behaviors[behavior] = 1
+				}
 				NewElementFromHandle(params.Element).attachBehavior(behavior)
 			} else {
 				log.Print("No such behavior: ", key)
@@ -686,32 +688,35 @@ func DataReady(hwnd uint32, uri *uint16, data []byte) bool {
 
 func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 	key := uintptr(hwnd)
-	if _, exists := eventHandlers[key]; exists {
-		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(key)); ret != HLDOM_OK {
+	tag := uintptr(unsafe.Pointer(handler))
+
+	if _, exists := windowEventHandlers[hwnd]; exists {
+		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from window before adding the new one")
 		}
 	}
 
 	// Overwrite if it exists
-	eventHandlers[key] = handler
+	windowEventHandlers[hwnd] = handler
 
 	// Don't let the caller disable ATTACH/DETACH events, otherwise we
 	// won't know when to throw out our event handler object
 	subscription := handler.Subscription()
 	subscription &= ^DISABLE_INITIALIZATION
 
-	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(key), C.UINT(subscription)); ret != HLDOM_OK {
+	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to attach event handler to window")
 	}
 }
 
 func DetachWindowEventHandler(hwnd uint32) {
 	key := uintptr(hwnd)
-	if _, exists := eventHandlers[key]; exists {
-		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(key)); ret != HLDOM_OK {
+	if handler, exists := windowEventHandlers[hwnd]; exists {
+		tag := uintptr(unsafe.Pointer(handler))
+		if ret := C.HTMLayoutWindowDetachEventHandler(C.HWND(C.HANDLE(key)), (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to detach event handler from window")
 		}
-		delete(eventHandlers, key)
+		delete(windowEventHandlers, hwnd)
 	}
 }
 
@@ -731,6 +736,7 @@ func DetachNotifyHandler(hwnd uint32) {
 }
 
 func DumpObjectCounts() {
-	log.Print("Window/element event handlers (", len(eventHandlers), "): ", eventHandlers)
 	log.Print("Window notify handlers (", len(notifyHandlers), "): ", notifyHandlers)
+	log.Print("Window event handlers (", len(windowEventHandlers), "): ", windowEventHandlers)
+	log.Print("Element event handlers (", len(eventHandlers), "): ", eventHandlers)
 }

@@ -233,7 +233,6 @@ func (e *Element) Equals(other *Element) bool {
 // dispatch method can tell if an event handler is a behavior or a regular handler.
 func (e *Element) attachBehavior(handler *EventHandler) {
 	tag := uintptr(unsafe.Pointer(handler))
-	behaviors[tag] = handler
 	if subscription := handler.Subscription(); subscription == HANDLE_ALL {
 		if ret := C.HTMLayoutAttachEventHandler(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to attach event handler to element")
@@ -246,19 +245,20 @@ func (e *Element) attachBehavior(handler *EventHandler) {
 }
 
 func (e *Element) AttachHandler(handler *EventHandler) {
-	tag := uintptr(unsafe.Pointer(handler))
-	if _, exists := eventHandlers[tag]; exists {
-		if ret := C.HTMLayoutDetachEventHandler(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
-			domPanic(ret, "Failed to detach event handler from element before attaching it again")
+	attachedHandles, hasAttachments := eventHandlers[handler]
+	if hasAttachments {
+		if _, exists := attachedHandles[e.handle]; exists {
+			// This exact event handler is already attached to this exact element.
+			return
 		}
 	}
-	eventHandlers[tag] = handler
 
 	// Don't let the caller disable ATTACH/DETACH events, otherwise we
 	// won't know when to throw out our event handler object
 	subscription := handler.Subscription()
 	subscription &= ^DISABLE_INITIALIZATION
 
+	tag := uintptr(unsafe.Pointer(handler))
 	if subscription == HANDLE_ALL {
 		if ret := C.HTMLayoutAttachEventHandler(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
 			domPanic(ret, "Failed to attach event handler to element")
@@ -268,18 +268,28 @@ func (e *Element) AttachHandler(handler *EventHandler) {
 			domPanic(ret, "Failed to attach event handler to element")
 		}
 	}
+
+	if !hasAttachments {
+		eventHandlers[handler] = make(map[HELEMENT]bool, 8)
+	}
+	eventHandlers[handler][e.handle] = true
 }
 
 func (e *Element) DetachHandler(handler *EventHandler) {
 	tag := uintptr(unsafe.Pointer(handler))
-	if _, exists := eventHandlers[tag]; exists {
-		if ret := C.HTMLayoutDetachEventHandler(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
-			domPanic(ret, "Failed to detach event handler from element")
+	if attachedHandles, exists := eventHandlers[handler]; exists {
+		if _, exists := attachedHandles[e.handle]; exists {
+			if ret := C.HTMLayoutDetachEventHandler(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
+				domPanic(ret, "Failed to detach event handler from element")
+			}
+			delete(attachedHandles, e.handle)
+			if len(attachedHandles) == 0 {
+				delete(eventHandlers, handler)
+			}
+			return
 		}
-		delete(eventHandlers, tag)
-	} else {
-		panic("cannot detach, handler was not registered")
 	}
+	panic("cannot detach, handler was not registered")
 }
 
 func (e *Element) Update(restyle, restyleDeep, remeasure, remeasureDeep, render bool) {
