@@ -318,7 +318,7 @@ var (
 	// get garbage collected.
 	notifyHandlers      = make(map[uintptr]*NotifyHandler, 8)
 	windowEventHandlers = make(map[uint32]*EventHandler, 8)
-	eventHandlers       = make(map[*EventHandler]map[HELEMENT]bool, 128)
+	eventHandlers       = make(map[HELEMENT]map[*EventHandler]bool, 128)
 	behaviors           = make(map[*EventHandler]int, 32)
 )
 

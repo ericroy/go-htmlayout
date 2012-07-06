@@ -201,6 +201,16 @@ func FocusedElement(hwnd uint32) *Element {
 // Finalizer method, only to be called from Release or by
 // the Go runtime
 func (e *Element) finalize() {
+	// Detach handlers
+	if attachedHandlers, hasHandlers := eventHandlers[e.handle]; hasHandlers {
+		for handler := range attachedHandlers {
+			tag := uintptr(unsafe.Pointer(handler))
+			if ret := C.HTMLayoutDetachEventHandler(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
+				domPanic(ret, "Failed to detach event handler from element")
+			}
+		}
+	}
+
 	// Release the underlying htmlayout handle
 	unuse(e.handle)
 	e.handle = BAD_HELEMENT
@@ -245,9 +255,9 @@ func (e *Element) attachBehavior(handler *EventHandler) {
 }
 
 func (e *Element) AttachHandler(handler *EventHandler) {
-	attachedHandles, hasAttachments := eventHandlers[handler]
+	attachedHandlers, hasAttachments := eventHandlers[e.handle]
 	if hasAttachments {
-		if _, exists := attachedHandles[e.handle]; exists {
+		if _, exists := attachedHandlers[handler]; exists {
 			// This exact event handler is already attached to this exact element.
 			return
 		}
@@ -270,21 +280,21 @@ func (e *Element) AttachHandler(handler *EventHandler) {
 	}
 
 	if !hasAttachments {
-		eventHandlers[handler] = make(map[HELEMENT]bool, 8)
+		eventHandlers[e.handle] = make(map[*EventHandler]bool, 8)
 	}
-	eventHandlers[handler][e.handle] = true
+	eventHandlers[e.handle][handler] = true
 }
 
 func (e *Element) DetachHandler(handler *EventHandler) {
 	tag := uintptr(unsafe.Pointer(handler))
-	if attachedHandles, exists := eventHandlers[handler]; exists {
-		if _, exists := attachedHandles[e.handle]; exists {
+	if attachedHandlers, exists := eventHandlers[e.handle]; exists {
+		if _, exists := attachedHandlers[handler]; exists {
 			if ret := C.HTMLayoutDetachEventHandler(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
 				domPanic(ret, "Failed to detach event handler from element")
 			}
-			delete(attachedHandles, e.handle)
-			if len(attachedHandles) == 0 {
-				delete(eventHandlers, handler)
+			delete(attachedHandlers, handler)
+			if len(attachedHandlers) == 0 {
+				delete(eventHandlers, e.handle)
 			}
 			return
 		}
