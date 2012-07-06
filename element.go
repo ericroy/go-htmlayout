@@ -209,6 +209,7 @@ func (e *Element) finalize() {
 				domPanic(ret, "Failed to detach event handler from element")
 			}
 		}
+		delete(eventHandlers, e.handle)
 	}
 
 	// Release the underlying htmlayout handle
