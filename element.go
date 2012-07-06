@@ -205,9 +205,7 @@ func (e *Element) finalize() {
 	if attachedHandlers, hasHandlers := eventHandlers[e.handle]; hasHandlers {
 		for handler := range attachedHandlers {
 			tag := uintptr(unsafe.Pointer(handler))
-			if ret := C.HTMLayoutDetachEventHandler(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag)); ret != HLDOM_OK {
-				domPanic(ret, "Failed to detach event handler from element")
-			}
+			C.HTMLayoutDetachEventHandler(e.handle, (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag))
 		}
 		delete(eventHandlers, e.handle)
 	}
