@@ -322,6 +322,7 @@ var pages = map[string]string{
 	"attr":        `<div id="a" first="5" second="5.1" third="yes"></div>`,
 	"css":         `<div style="left:10; opacity:0.5; text-align:center;"></div>`,
 	"classes":     `<div class="one  two three"></div><div></div>`,
+	"input":	   `<widget type="text" value="test string"></widget>`,
 }
 
 // Notify handler deals with WM_NOTIFY messages sent by htmlayout
@@ -1235,5 +1236,37 @@ func TestAttachSameHandlerToTwoElements(t *testing.T) {
 		d2.AttachHandler(handler)
 		d2.DetachHandler(handler)
 		d1.DetachHandler(handler)
+	})
+}
+
+// func TestControlValueType(t *testing.T) {
+// 	testWithHtml(pages["input"], func(hwnd uint32) {
+// 		input := RootElement(hwnd).Child(0)
+// 		if dataType := input.ValueType(); dataType != T_STRING {
+// 			t.Fatal("Value type should be string")
+// 		}
+// 	})
+// }
+
+func TestValueAsString(t *testing.T) {
+	testWithHtml(pages["input"], func(hwnd uint32) {
+		input := RootElement(hwnd).Child(0)
+		if s, err := input.ValueAsString(); err != nil {
+			t.Fatal(err)
+		} else if s != "test string" {
+			t.Fatal("Unexpected value: ", s)
+		}
+	})
+}
+
+func TestSetValueString(t *testing.T) {
+	testWithHtml(pages["input"], func(hwnd uint32) {
+		input := RootElement(hwnd).Child(0)
+		input.SetValue("woohoo")
+		if s, err := input.ValueAsString(); err != nil {
+			t.Fatal(err)
+		} else if s != "woohoo" {
+			t.Fatal("Unexpected value: ", s)
+		}
 	})
 }

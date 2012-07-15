@@ -11,6 +11,7 @@ import "C"
 
 import (
 	"fmt"
+	"errors"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -165,12 +166,9 @@ func utf16ToStringLength(s *uint16, length int) string {
 	us := make([]uint16, 0, 256)
 	for p, i := uintptr(unsafe.Pointer(s)), 0; i < length; p, i = p+2, i+1 {
 		u := *(*uint16)(unsafe.Pointer(p))
-		if u == 0 {
-			return string(utf16.Decode(us))
-		}
 		us = append(us, u)
 	}
-	return ""
+	return string(utf16.Decode(us))
 }
 
 // Returns pointer to the utf-16 encoding of
@@ -891,43 +889,48 @@ func (e *Element) MarginBoxSize() (width, height int) {
 
 
 //
-// Functions for retrieving/setting the data in a native input control
+// Functions for retrieving/setting the value in widget input controls
 //
-func (e *Element) ValueType() int {
-	val := &C.JSON_VALUE{}
-	if ret := C.ValueInit(val); ret != HV_OK {
-		valuePanic(ret, "Failed to init value")
-	}	
-	if ret := C.HTMLayoutControlGetValue(e.handle, val); ret != HLDOM_OK {
-		domPanic(ret, "Failed to get control value")
-	}
-	
-	return int(val.t)
+
+type textValueParams struct {
+	MethodId uint32
+	Text *uint16
+	Length uint32
 }
 
 func (e *Element) ValueAsString() (string, error) {
-	val := &C.JSON_VALUE{}
-	if ret := C.ValueInit(val); ret != HV_OK {
-		valuePanic(ret, "Failed to init value")
-	}	
-	if ret := C.HTMLayoutControlGetValue(e.handle, val); ret != HLDOM_OK {
-		domPanic(ret, "Failed to get control value")
+	args := &textValueParams{ MethodId: GET_TEXT_VALUE }
+	ret := C.HTMLayoutCallBehaviorMethod(e.handle, (*C.METHOD_PARAMS)(unsafe.Pointer(args)))
+	if ret == HLDOM_OK_NOT_HANDLED {
+		domPanic(ret, "This type of element does not provide data in this way.  Try a <widget>.")
+	} else if ret != HLDOM_OK {
+		domPanic(ret, "Could not get text value")
 	}
-
-	if val.t != T_STRING {
-		if ret := C.ValueToString(val, C.CVT_SIMPLE); ret != HV_OK {
-			valuePanic(ret, "Failed to convert to string")
-		}
+	if args.Text == nil {
+		return "", errors.New("Nil string pointer")
 	}
-
-	var data *C.WCHAR
-	var charCount C.UINT
-	if ret := C.ValueStringData(val, (*C.LPCWSTR)(&data), &charCount); ret != HV_OK {
-		valuePanic(ret, "Failed to get string data")
-	}
-
-	return utf16ToStringLength((*uint16)(unsafe.Pointer(data)), int(charCount)), nil
+	return utf16ToStringLength(args.Text, int(args.Length)), nil
 }
+
+func (e *Element) SetValue(value interface{}) {
+	switch v := value.(type) {
+	case string:
+		args := &textValueParams{
+			MethodId: SET_TEXT_VALUE,
+			Text: stringToUtf16Ptr(v),
+			Length: uint32(len(v)),
+		}
+		ret := C.HTMLayoutCallBehaviorMethod(e.handle, (*C.METHOD_PARAMS)(unsafe.Pointer(args)))
+		if ret == HLDOM_OK_NOT_HANDLED {
+			domPanic(ret, "This type of element does not accept data in this way.  Try a <widget>.")
+		} else if ret != HLDOM_OK {
+			domPanic(ret, "Could not set text value")
+		}
+	default:
+		panic("Don't know how to set values of this type")
+	}
+}
+
 
 
 //
