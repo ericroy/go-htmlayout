@@ -571,6 +571,15 @@ func (e *Element) SetText(text string) {
 	}
 }
 
+func (e *Element) Text() string {
+	var data *C.char
+	if ret := C.HTMLayoutGetElementInnerText(e.handle, (*C.LPBYTE)(unsafe.Pointer(&data))); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get text")
+	}
+	return C.GoString(data)
+}
+
+
 //
 // HTML attribute accessors/modifiers:
 //
