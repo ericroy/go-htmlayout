@@ -311,6 +311,22 @@ const (
 	SELF_RELATIVE      = C.SELF_RELATIVE      // - "or" this flag if you want to get coordinates relative to the origin of element iself.
 	CONTAINER_RELATIVE = C.CONTAINER_RELATIVE // - position inside immediate container.
 	VIEW_RELATIVE      = C.VIEW_RELATIVE
+
+	T_UNDEFINED = C.T_UNDEFINED
+    T_NULL = C.T_NULL
+    T_BOOL = C.T_BOOL
+    T_INT = C.T_INT
+    T_FLOAT = C.T_FLOAT
+    T_STRING = C.T_STRING
+    T_DATE = C.T_DATE
+    T_CURRENCY = C.T_CURRENCY
+    T_LENGTH = C.T_LENGTH
+    T_ARRAY = C.T_ARRAY
+    T_MAP = C.T_MAP
+    T_FUNCTION = C.T_FUNCTION
+    T_BYTES = C.T_BYTES
+    T_OBJECT = C.T_OBJECT
+    T_DOM_OBJECT = C.T_DOM_OBJECT
 )
 
 var (
@@ -324,6 +340,8 @@ var (
 
 type HELEMENT C.HELEMENT
 type HLDOM_RESULT C.HLDOM_RESULT
+type VALUE_RESULT C.UINT
+
 
 type Point struct {
 	X int32

@@ -29,6 +29,11 @@ const (
 	HLDOM_OPERATION_FAILED  = C.HLDOM_OPERATION_FAILED
 	HLDOM_OK_NOT_HANDLED    = C.HLDOM_OK_NOT_HANDLED
 
+	HV_OK_TRUE = 0xffffffff
+	HV_OK = C.HV_OK
+	HV_BAD_PARAMETER = C.HV_BAD_PARAMETER
+	HV_INCOMPATIBLE_TYPE = C.HV_INCOMPATIBLE_TYPE
+
 	STATE_LINK       = 0x00000001 // selector :link,    any element having href attribute
 	STATE_HOVER      = 0x00000002 // selector :hover,   element is under the cursor, mouse hover  
 	STATE_ACTIVE     = 0x00000004 // selector :active,  element is activated, e.g. pressed  
@@ -85,6 +90,14 @@ var errorToString = map[HLDOM_RESULT]string{
 	HLDOM_OK_NOT_HANDLED:    "HLDOM_OK_NOT_HANDLED",
 }
 
+var valueErrorToString = map[VALUE_RESULT]string{
+	HV_OK_TRUE: "HV_OK_TRUE", 
+	HV_OK: "HV_OK",
+	HV_BAD_PARAMETER: "HV_BAD_PARAMETER",
+	HV_INCOMPATIBLE_TYPE: "HV_INCOMPATIBLE_TYPE",
+}
+
+
 var whitespaceSplitter = regexp.MustCompile(`(\S+)`)
 
 // DomError represents an htmlayout error with an associated
@@ -106,6 +119,22 @@ func domPanic(result C.HLDOM_RESULT, message ...interface{}) {
 	panic(&DomError{HLDOM_RESULT(result), fmt.Sprint(message...)})
 }
 
+
+type ValueError struct {
+	Result  VALUE_RESULT
+	Message string
+}
+
+func (e *ValueError) Error() string {
+	return fmt.Sprintf("%s: %s", valueErrorToString[e.Result], e.Message)
+}
+
+func valuePanic(result C.UINT, message ...interface{}) {
+	panic(&ValueError{VALUE_RESULT(result), fmt.Sprint(message...)})
+}
+
+
+
 // Returns the utf-16 encoding of the utf-8 string s,
 // with a terminating NUL added.
 func stringToUtf16(s string) []uint16 {
@@ -120,6 +149,21 @@ func utf16ToString(s *uint16) string {
 	}
 	us := make([]uint16, 0, 256)
 	for p := uintptr(unsafe.Pointer(s)); ; p += 2 {
+		u := *(*uint16)(unsafe.Pointer(p))
+		if u == 0 {
+			return string(utf16.Decode(us))
+		}
+		us = append(us, u)
+	}
+	return ""
+}
+
+func utf16ToStringLength(s *uint16, length int) string {
+	if s == nil {
+		panic("null cstring")
+	}
+	us := make([]uint16, 0, 256)
+	for p, i := uintptr(unsafe.Pointer(s)), 0; i < length; p, i = p+2, i+1 {
 		u := *(*uint16)(unsafe.Pointer(p))
 		if u == 0 {
 			return string(utf16.Decode(us))
@@ -843,6 +887,48 @@ func (e *Element) MarginBoxSize() (width, height int) {
 	l, t, r, b := e.getRect(MARGIN_BOX)
 	return int(r - l), int(b - t)
 }
+
+
+
+//
+// Functions for retrieving/setting the data in a native input control
+//
+func (e *Element) ValueType() int {
+	val := &C.JSON_VALUE{}
+	if ret := C.ValueInit(val); ret != HV_OK {
+		valuePanic(ret, "Failed to init value")
+	}	
+	if ret := C.HTMLayoutControlGetValue(e.handle, val); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get control value")
+	}
+	
+	return int(val.t)
+}
+
+func (e *Element) ValueAsString() (string, error) {
+	val := &C.JSON_VALUE{}
+	if ret := C.ValueInit(val); ret != HV_OK {
+		valuePanic(ret, "Failed to init value")
+	}	
+	if ret := C.HTMLayoutControlGetValue(e.handle, val); ret != HLDOM_OK {
+		domPanic(ret, "Failed to get control value")
+	}
+
+	if val.t != T_STRING {
+		if ret := C.ValueToString(val, C.CVT_SIMPLE); ret != HV_OK {
+			valuePanic(ret, "Failed to convert to string")
+		}
+	}
+
+	var data *C.WCHAR
+	var charCount C.UINT
+	if ret := C.ValueStringData(val, (*C.LPCWSTR)(&data), &charCount); ret != HV_OK {
+		valuePanic(ret, "Failed to get string data")
+	}
+
+	return utf16ToStringLength((*uint16)(unsafe.Pointer(data)), int(charCount)), nil
+}
+
 
 //
 // The following are not strictly wrappers of htmlayout functions, but rather convenience 
