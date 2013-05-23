@@ -720,7 +720,7 @@ func AttachWindowEventHandler(hwnd uint32, handler *EventHandler) {
 	// Don't let the caller disable ATTACH/DETACH events, otherwise we
 	// won't know when to throw out our event handler object
 	subscription := handler.Subscription()
-	subscription &= ^DISABLE_INITIALIZATION
+	subscription &= ^uint32(DISABLE_INITIALIZATION & 0xffffffff)
 
 	if ret := C.HTMLayoutWindowAttachEventHandler(C.HWND(C.HANDLE(key)), (*[0]byte)(unsafe.Pointer(goElementProc)), C.LPVOID(tag), C.UINT(subscription)); ret != HLDOM_OK {
 		domPanic(ret, "Failed to attach event handler to window")

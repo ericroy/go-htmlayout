@@ -307,7 +307,7 @@ func (e *Element) AttachHandler(handler *EventHandler) {
 	// Don't let the caller disable ATTACH/DETACH events, otherwise we
 	// won't know when to throw out our event handler object
 	subscription := handler.Subscription()
-	subscription &= ^DISABLE_INITIALIZATION
+	subscription &= ^uint32(DISABLE_INITIALIZATION & 0xffffffff)
 
 	tag := uintptr(unsafe.Pointer(handler))
 	if subscription == HANDLE_ALL {
